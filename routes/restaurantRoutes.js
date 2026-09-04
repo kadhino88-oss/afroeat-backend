@@ -4,6 +4,7 @@ const router = express.Router();
 
 const {
   getRestaurants,
+  getNearbyRestaurants,
   getMyRestaurant,
   getRestaurantById,
   createRestaurant,
@@ -21,6 +22,8 @@ const { allowRoles } = require('../middleware/roleMiddleware');
  */
 
 router.get('/', getRestaurants);
+
+router.get('/nearby', getNearbyRestaurants);
 
 router.get(
   '/my',

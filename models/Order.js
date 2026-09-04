@@ -11,7 +11,7 @@ const allowedStatuses = [
 
 const allowedPaymentStatuses = ['Non payé', 'Payé', 'Remboursé'];
 
-const allowedCurrencies = ['EUR', 'USD', 'GBP', 'XOF', 'XAF', 'CAD'];
+const allowedCurrencies = ['EUR', 'USD', 'GBP', 'CHF', 'XOF', 'XAF', 'CAD'];
 
 const isFiniteNumber = (value) => Number.isFinite(Number(value));
 
@@ -245,6 +245,20 @@ const orderSchema = new mongoose.Schema(
       validate: {
         validator: Number.isFinite,
         message: 'Les frais de livraison sont invalides',
+      },
+    },
+
+    // Don optionnel "Afro Impact" ajoute par le client au moment du
+    // checkout (arrondi de commande reverse a une association) -
+    // jamais applique automatiquement, toujours un choix explicite du client.
+    donationAmount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Le don ne peut pas être négatif'],
+      max: [100, 'Le don semble anormalement élevé'],
+      validate: {
+        validator: Number.isFinite,
+        message: 'Le montant du don est invalide',
       },
     },
 
@@ -560,6 +574,9 @@ orderSchema.pre('save', function () {
   const normalizedDeliveryFee = roundMoney(this.deliveryFee);
   this.deliveryFee = normalizedDeliveryFee;
 
+  const normalizedDonationAmount = roundMoney(this.donationAmount);
+  this.donationAmount = normalizedDonationAmount;
+
   if (Array.isArray(this.items) && this.items.length > 0) {
     const calculatedItemsTotal = this.items.reduce((acc, item) => {
       const price = normalizeNumber(item.price, 0);
@@ -568,7 +585,9 @@ orderSchema.pre('save', function () {
     }, 0);
 
     const itemsSubtotal = roundMoney(calculatedItemsTotal);
-    this.totalPrice = roundMoney(itemsSubtotal + normalizedDeliveryFee);
+    this.totalPrice = roundMoney(
+      itemsSubtotal + normalizedDeliveryFee + normalizedDonationAmount
+    );
   } else {
     this.totalPrice = roundMoney(this.totalPrice);
   }

@@ -24,6 +24,16 @@ const menuItemSchema = new mongoose.Schema(
       maxlength: [1000, 'La description est trop longue'],
     },
 
+    // Petite histoire culturelle/origine du plat, affichée cote client
+    // pour donner du contexte (inspire par le retour de Kader sur un
+    // prototype concurrent qui mettait bien en valeur ce recit par plat).
+    story: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [800, "L'histoire du plat est trop longue"],
+    },
+
     price: {
       type: Number,
       required: [true, 'Le prix est obligatoire'],

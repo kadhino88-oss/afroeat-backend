@@ -452,6 +452,129 @@ const getRestaurants = async (req, res) => {
   }
 };
 
+// Distance a vol d'oiseau (km) entre deux points GPS - formule de Haversine.
+// Pas besoin d'index geospatial MongoDB tant que le nombre de restaurants
+// reste petit (debut de projet) ; a migrer vers un index 2dsphere + $near
+// si le catalogue grossit beaucoup.
+const distanceKm = (lat1, lng1, lat2, lng2) => {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const getRestaurantCoords = (restaurant) => {
+  const lat = normalizeNumber(
+    restaurant?.latitude ?? restaurant?.location?.latitude,
+    NaN
+  );
+  const lng = normalizeNumber(
+    restaurant?.longitude ?? restaurant?.location?.longitude,
+    NaN
+  );
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+};
+
+// Detection automatique des restaurants africains a proximite d'un point
+// GPS (utilise par l'app pour l'auto-detection de zone France/Suisse/etc.
+// a l'ouverture, cote client - jamais d'appel a une clef de geocodage
+// externe payante, uniquement les coordonnees restaurant deja en base).
+const getNearbyRestaurants = async (req, res) => {
+  try {
+    const lat = normalizeNumber(req.query.lat, NaN);
+    const lng = normalizeNumber(req.query.lng, NaN);
+    const maxDistance = normalizeNumber(req.query.maxDistance, 10);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Coordonnées lat/lng invalides ou manquantes.',
+      });
+    }
+
+    if (!Number.isFinite(maxDistance) || maxDistance <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'maxDistance invalide.',
+      });
+    }
+
+    const filters = buildRestaurantFilters(req.query);
+    if (filters.isActive === undefined) filters.isActive = true;
+
+    const restaurants = await populateRestaurantQuery(Restaurant.find(filters));
+
+    const withDistance = restaurants
+      .map((restaurantDoc) => {
+        const restaurant =
+          typeof restaurantDoc.toObject === 'function'
+            ? restaurantDoc.toObject({ virtuals: true })
+            : { ...restaurantDoc };
+
+        const coords = getRestaurantCoords(restaurant);
+        if (!coords) return null;
+
+        const distance = distanceKm(lat, lng, coords.lat, coords.lng);
+        if (distance > maxDistance) return null;
+
+        return { restaurant, distance };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.distance - b.distance);
+
+    const restaurantIds = withDistance.map((entry) => entry.restaurant._id);
+    const [menuMap, statsMap] = await Promise.all([
+      batchLoadMenuItems(restaurantIds),
+      batchLoadOrderStats(restaurantIds),
+    ]);
+
+    const items = withDistance
+      .map(({ restaurant, distance }) => {
+        const rid = String(restaurant._id);
+
+        let menus = [];
+        if (Array.isArray(restaurant?.menu) && restaurant.menu.length > 0) {
+          menus = restaurant.menu;
+        } else if (
+          Array.isArray(restaurant?.menus) &&
+          restaurant.menus.length > 0
+        ) {
+          menus = restaurant.menus;
+        } else {
+          menus = menuMap[rid] || [];
+        }
+
+        const enriched = enrichRestaurantWithData(
+          restaurant,
+          menus,
+          statsMap[rid]
+        );
+        if (!enriched) return null;
+
+        return { ...enriched, distanceKm: Number(distance.toFixed(2)) };
+      })
+      .filter(Boolean);
+
+    return res.status(200).json({
+      success: true,
+      restaurants: items,
+      count: items.length,
+      origin: { lat, lng },
+      maxDistance,
+    });
+  } catch (error) {
+    console.error('GET NEARBY RESTAURANTS ERROR =>', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Impossible de charger les restaurants à proximité.',
+    });
+  }
+};
+
 const getMyRestaurant = async (req, res) => {
   try {
     if (!req.user) {
@@ -550,6 +673,7 @@ const deleteRestaurant = async (req, res) => {
 };
 
 module.exports = {
+  getNearbyRestaurants,
   getRestaurants,
   getMyRestaurant,
   getRestaurantById,

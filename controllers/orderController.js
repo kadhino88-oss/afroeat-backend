@@ -321,6 +321,7 @@ const sanitizeOrderForResponse = (orderDocument) => {
     financials: {
       totalPrice: roundMoney(order?.totalPrice),
       deliveryFee: roundMoney(order?.deliveryFee),
+      donationAmount: roundMoney(order?.donationAmount),
       driverEarning: roundMoney(order?.driverEarning),
       currency: normalizeString(order?.currency, 'EUR'),
     },
@@ -593,6 +594,7 @@ const createOrder = async (req, res) => {
       restaurantLocation,
       deliveryFee,
       driverEarning,
+      donationAmount,
     } = req.body;
 
     const orderUser = req.user.role === 'client' ? req.user._id : user;
@@ -689,7 +691,15 @@ const createOrder = async (req, res) => {
       deliveryFee ?? restaurantExists?.deliveryFee ?? 0
     );
 
-    const expectedTotal = roundMoney(itemsSubtotal + safeDeliveryFee);
+    // Don "Afro Impact" optionnel choisi par le client au checkout -
+    // jamais deduit automatiquement, borne pour eviter une saisie absurde.
+    const safeDonationAmount = roundMoney(
+      Math.min(Math.max(normalizeNumber(donationAmount, 0), 0), 100)
+    );
+
+    const expectedTotal = roundMoney(
+      itemsSubtotal + safeDeliveryFee + safeDonationAmount
+    );
     const providedTotal =
       totalPrice !== undefined && totalPrice !== null
         ? roundMoney(totalPrice)
@@ -702,10 +712,11 @@ const createOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message:
-          'Le total de la commande est incohérent avec le sous-total et les frais de livraison.',
+          'Le total de la commande est incohérent avec le sous-total, les frais de livraison et le don éventuel.',
         details: {
           itemsSubtotal,
           deliveryFee: safeDeliveryFee,
+          donationAmount: safeDonationAmount,
           expectedTotal,
           providedTotal,
         },
@@ -772,6 +783,7 @@ const createOrder = async (req, res) => {
       customerLocation: safeCustomerLocation,
       restaurantLocation: safeRestaurantLocation,
       deliveryFee: safeDeliveryFee,
+      donationAmount: safeDonationAmount,
       driverEarning: safeDriverEarning,
       statusHistory: [
         {
