@@ -7,6 +7,7 @@ const {
   reconcileOrderPayout,
   isPartnerReadyForTransfers,
   isConnectPayoutsEnabled,
+  isTransferCountryAllowed,
 } = require('../utils/marketplacePayouts');
 
 const getStripe = () => {
@@ -35,6 +36,23 @@ const getPublicApiUrl = () => {
     throw new Error('PUBLIC_API_URL doit utiliser un domaine public réel en production.');
   }
   return url.toString().replace(/\/$/, '');
+};
+
+const getPublicWebUrl = () => {
+  const raw = String(process.env.PUBLIC_WEB_URL || '').trim();
+  if (!raw) {
+    if (process.env.NODE_ENV === 'production') throw new Error('PUBLIC_WEB_URL est manquant.');
+    return undefined;
+  }
+  const url = new URL(raw);
+  const hostname = url.hostname.toLowerCase();
+  const placeholder = ['.invalid', '.example', '.test'].some((suffix) => hostname.endsWith(suffix));
+  const localHost = ['localhost', '127.0.0.1'].includes(hostname);
+  if (process.env.NODE_ENV === 'production' &&
+      (url.protocol !== 'https:' || placeholder || localHost)) {
+    throw new Error('PUBLIC_WEB_URL doit être un domaine public HTTPS réel en production.');
+  }
+  return process.env.NODE_ENV === 'production' ? url.toString() : (localHost ? undefined : url.toString());
 };
 
 const getJwtSecret = () => {
@@ -84,6 +102,7 @@ const getConnectStatus = async (req, res) => {
         success: true,
         connected: false,
         accountReady: false,
+        countryAllowed: false,
         payoutsFeatureEnabled: isConnectPayoutsEnabled(),
         detailsSubmitted: false,
         transfersEnabled: false,
@@ -95,12 +114,19 @@ const getConnectStatus = async (req, res) => {
 
     const account = await getStripe().accounts.retrieve(user.stripeConnectAccountId);
     await refreshAccountStatus(user, account);
-    const accountReady = isPartnerReadyForTransfers(user);
-    const payoutsFeatureEnabled = require('../utils/marketplacePayouts').isConnectPayoutsEnabled();
+    const accountReady = Boolean(
+      user.stripeConnectAccountId &&
+      user.stripeConnectDetailsSubmitted &&
+      user.stripeConnectTransfersEnabled &&
+      user.stripeConnectPayoutsEnabled
+    );
+    const countryAllowed = isTransferCountryAllowed(user.countryCode);
+    const payoutsFeatureEnabled = isConnectPayoutsEnabled();
     return res.status(200).json({
       success: true,
-      connected: accountReady && payoutsFeatureEnabled,
+      connected: accountReady && countryAllowed && payoutsFeatureEnabled,
       accountReady,
+      countryAllowed,
       payoutsFeatureEnabled,
       detailsSubmitted: user.stripeConnectDetailsSubmitted,
       transfersEnabled: user.stripeConnectTransfersEnabled,
@@ -180,7 +206,7 @@ const startConnectOnboarding = async (req, res) => {
           capabilities: { transfers: { requested: true } },
           business_profile: {
             name: user.name,
-            url: String(process.env.PUBLIC_WEB_URL || '').trim() || undefined,
+            url: getPublicWebUrl(),
           },
           metadata: { userId: user._id.toString(), platform: 'afroeat' },
         },
