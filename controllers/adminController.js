@@ -643,10 +643,15 @@ const updateAdminUserVerification = async (req, res) => {
 
     const previousIdentityVerified = existingUser.isIdentityVerified === true;
     const previousWorkAuthorized = existingUser.isWorkAuthorized === true;
+    const previousAvailability = existingUser.isAvailable === true;
+    const requiresOffline =
+      !decision.isIdentityVerified || !decision.isWorkAuthorized;
+    const needsAvailabilityRevocation = requiresOffline && previousAvailability;
 
     if (
       previousIdentityVerified === decision.isIdentityVerified &&
-      previousWorkAuthorized === decision.isWorkAuthorized
+      previousWorkAuthorized === decision.isWorkAuthorized &&
+      !needsAvailabilityRevocation
     ) {
       return res.status(200).json({
         success: true,
@@ -664,12 +669,19 @@ const updateAdminUserVerification = async (req, res) => {
       });
     }
 
+    const updateFields = {
+      isIdentityVerified: decision.isIdentityVerified,
+      isWorkAuthorized: decision.isWorkAuthorized,
+    };
+    // A courier whose identity or work authorization is revoked must be taken
+    // offline in the same database update, not merely excluded from new orders.
+    if (requiresOffline) {
+      updateFields.isAvailable = false;
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       id,
-      {
-        isIdentityVerified: decision.isIdentityVerified,
-        isWorkAuthorized: decision.isWorkAuthorized,
-      },
+      updateFields,
       { new: true, runValidators: true }
     ).select(
       '_id name email role accountStatus isIdentityVerified isWorkAuthorized isAvailable'
@@ -685,8 +697,10 @@ const updateAdminUserVerification = async (req, res) => {
       metadata: {
         previousIdentityVerified,
         previousWorkAuthorized,
+        previousAvailability,
         isIdentityVerified: decision.isIdentityVerified,
         isWorkAuthorized: decision.isWorkAuthorized,
+        isAvailable: updatedUser?.isAvailable === true,
       },
     });
 
