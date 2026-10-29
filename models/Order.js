@@ -300,6 +300,51 @@ const orderSchema = new mongoose.Schema(
       index: true,
     },
 
+    paymentMethod: {
+      type: String,
+      enum: ['card', 'stripe_checkout', 'cash'],
+      default: null,
+      trim: true,
+    },
+
+    stripePaymentIntentId: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: [255, 'Identifiant PaymentIntent invalide'],
+    },
+
+    stripeCheckoutSessionId: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: [255, 'Identifiant Checkout Session invalide'],
+    },
+
+    stripeRefundId: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: [255, 'Identifiant de remboursement invalide'],
+    },
+
+    paidAt: {
+      type: Date,
+      default: null,
+    },
+
+    refundedAt: {
+      type: Date,
+      default: null,
+    },
+
+    lastPaymentError: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [500, 'Le message de paiement est trop long'],
+    },
+
     deliveryPerson: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -391,6 +436,8 @@ orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ restaurant: 1, createdAt: -1 });
 orderSchema.index({ deliveryPerson: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1, createdAt: -1 });
+orderSchema.index({ stripePaymentIntentId: 1 });
+orderSchema.index({ stripeCheckoutSessionId: 1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ status: 1, deliveryPerson: 1, updatedAt: -1 });
 orderSchema.index({ restaurant: 1, status: 1, createdAt: -1 });
