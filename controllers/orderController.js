@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const MenuItem = require('../models/MenuItem');
 const { sendPushToUser } = require('../utils/pushNotifications');
+const { priceRequestedOrderItems } = require('../utils/orderPricing');
 const {
   createOrderRequestFingerprint,
   isValidIdempotencyKey,
@@ -753,32 +754,17 @@ const createOrder = async (req, res) => {
     })
       .select('_id name price image')
       .lean();
-    const menuItemsById = new Map(
-      menuItems.map((item) => [String(item._id), item])
-    );
 
-    if (menuItemsById.size !== menuItemIds.length) {
+    const pricedOrderItems = priceRequestedOrderItems(requestedItems, menuItems);
+    if (!pricedOrderItems) {
       return res.status(409).json({
         success: false,
         message: 'Un ou plusieurs plats ne sont plus disponibles dans ce restaurant.',
       });
     }
 
-    const normalizedItems = requestedItems.map((requestedItem) => {
-      const menuItem = menuItemsById.get(String(requestedItem.menuItem));
-      return {
-        menuItem: menuItem._id,
-        name: normalizeString(menuItem.name),
-        quantity: requestedItem.quantity,
-        price: roundMoney(menuItem.price),
-        image: normalizeString(menuItem.image),
-        notes: normalizeString(requestedItem.notes).slice(0, 300),
-      };
-    });
-
-    const itemsSubtotal = roundMoney(
-      normalizedItems.reduce((sum, item) => sum + roundMoney(item.price) * item.quantity, 0)
-    );
+    const normalizedItems = pricedOrderItems.items;
+    const itemsSubtotal = pricedOrderItems.itemsSubtotal;
 
     if (itemsSubtotal < normalizeNumber(restaurantExists.minimumOrderAmount, 0)) {
       return res.status(400).json({
