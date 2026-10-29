@@ -198,6 +198,20 @@ const orderSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Optional idempotency identity for safe mobile-network retries.
+    idempotencyKey: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: [128, 'La clé de requête est trop longue'],
+    },
+
+    requestFingerprint: {
+      type: String,
+      default: null,
+      match: [/^[a-f0-9]{64}$/i, 'Empreinte de requête invalide'],
+    },
+
     restaurant: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Restaurant',
@@ -434,6 +448,14 @@ const orderSchema = new mongoose.Schema(
 orderSchema.index({ createdAt: -1 });
 orderSchema.index({ updatedAt: -1 });
 orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index(
+  { user: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: 'string' } },
+    name: 'unique_user_idempotency_key',
+  }
+);
 orderSchema.index({ restaurant: 1, createdAt: -1 });
 orderSchema.index({ deliveryPerson: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1, createdAt: -1 });
