@@ -3,6 +3,7 @@
 const Order = require('../models/Order');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
+const { isMatchingPaymentIntent } = require('./paymentValidation');
 
 const isConnectPayoutsEnabled = () => {
   if (
@@ -56,6 +57,22 @@ const toStripeAmount = (amount, currency) => {
   if (!['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'XOF', 'XAF'].includes(code)) return null;
   const minorUnits = Math.round(value * (code === 'XOF' || code === 'XAF' ? 1 : 100));
   return Number.isSafeInteger(minorUnits) && minorUnits > 0 ? minorUnits : null;
+};
+
+const validatePayoutPaymentIntent = (order, intent) => {
+  if (!isMatchingPaymentIntent({ order, paymentIntent: intent, toStripeAmount })) {
+    return { valid: false, reason: 'payment_intent_mismatch', chargeId: null };
+  }
+
+  const chargeId = typeof intent.latest_charge === 'string'
+    ? intent.latest_charge
+    : intent.latest_charge?.id;
+
+  if (!chargeId) {
+    return { valid: false, reason: 'charge_missing', chargeId: null };
+  }
+
+  return { valid: true, reason: null, chargeId };
 };
 
 const isPartnerReadyForTransfers = (user) => {
@@ -194,11 +211,15 @@ const createDeliveredOrderTransfers = async (orderId) => {
     const intent = await stripe.paymentIntents.retrieve(order.stripePaymentIntentId, {
       expand: ['latest_charge'],
     });
-    if (intent.status !== 'succeeded') throw new Error('Le paiement Stripe n’est pas finalisé.');
-    const chargeId = typeof intent.latest_charge === 'string'
-      ? intent.latest_charge
-      : intent.latest_charge?.id;
-    if (!chargeId) throw new Error('Charge Stripe introuvable pour cette commande.');
+    const paymentCheck = validatePayoutPaymentIntent(order, intent);
+    if (!paymentCheck.valid) {
+      throw new Error(
+        paymentCheck.reason === 'charge_missing'
+          ? 'Charge Stripe introuvable pour cette commande.'
+          : 'Le paiement Stripe ne correspond pas à la commande, au montant ou à la devise enregistrés.'
+      );
+    }
+    const { chargeId } = paymentCheck;
 
     order.payoutStatus = 'processing';
     order.payoutError = '';
@@ -342,4 +363,5 @@ module.exports = {
   flagOrderDispute,
   toStripeAmount,
   isPartialRefundCharge,
+  validatePayoutPaymentIntent,
 };
