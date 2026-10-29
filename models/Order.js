@@ -699,9 +699,12 @@ orderSchema.pre('save', function () {
     this.totalPrice = roundMoney(this.totalPrice);
   }
 
-  this.driverEarning = roundMoney(
-    this.driverEarning > 0 ? this.driverEarning : this.deliveryFee
-  );
+  // A zero courier share is a valid marketplace configuration; never
+  // silently replace it with the entire delivery fee.
+  this.driverEarning = roundMoney(this.driverEarning);
+  this.platformCommissionAmount = roundMoney(this.platformCommissionAmount);
+  this.restaurantEarning = roundMoney(this.restaurantEarning);
+  this.platformDeliveryEarning = roundMoney(this.platformDeliveryEarning);
 
   this.notes = normalizeString(this.notes);
   this.deliveryAddress = normalizeString(this.deliveryAddress);
