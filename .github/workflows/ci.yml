@@ -2,9 +2,9 @@ name: Backend CI
 
 on:
   push:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "sync/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "fix/**"]
 
 jobs:
   validate:
