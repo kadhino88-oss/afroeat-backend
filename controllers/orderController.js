@@ -3,6 +3,13 @@ const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
+const MenuItem = require('../models/MenuItem');
+const { getMarketplaceRates } = require('../config/marketplaceRates');
+const { priceRequestedOrderItems } = require('../utils/orderPricing');
+const {
+  createOrderRequestFingerprint,
+  isValidIdempotencyKey,
+} = require('../utils/orderIdempotency');
 const { sendPushToUser } = require('../utils/pushNotifications');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 
@@ -579,6 +586,9 @@ const getOrderById = async (req, res) => {
 };
 
 const createOrder = async (req, res) => {
+  let orderUser = null;
+  let rawIdempotencyKey = '';
+  let requestFingerprint = null;
   try {
     const {
       user,
@@ -598,7 +608,18 @@ const createOrder = async (req, res) => {
       donationAmount,
     } = req.body;
 
-    const orderUser = req.user.role === 'client' ? req.user._id : user;
+    orderUser = req.user?.role === 'client' ? req.user._id : user;
+
+    rawIdempotencyKey = normalizeString(
+      req.get('Idempotency-Key') || req.body?.idempotencyKey
+    );
+    if (rawIdempotencyKey && !isValidIdempotencyKey(rawIdempotencyKey)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_IDEMPOTENCY_KEY',
+        message: 'Clé de requête invalide.',
+      });
+    }
 
     if (!orderUser || !restaurant || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -651,8 +672,41 @@ const createOrder = async (req, res) => {
       });
     }
 
+    const requestedItemsForFingerprint = normalizeItems(items);
+    requestFingerprint = rawIdempotencyKey
+      ? createOrderRequestFingerprint({
+          restaurant,
+          items: requestedItemsForFingerprint,
+          deliveryAddress: safeDeliveryAddress,
+          notes,
+        })
+      : null;
+
+    if (rawIdempotencyKey) {
+      const previousOrder = await Order.findOne({
+        user: orderUser,
+        idempotencyKey: rawIdempotencyKey,
+      });
+      if (previousOrder) {
+        if (previousOrder.requestFingerprint !== requestFingerprint) {
+          return res.status(409).json({
+            success: false,
+            code: 'IDEMPOTENCY_KEY_REUSED',
+            message: 'Cette clé a déjà été utilisée pour une autre commande. Relance avec une nouvelle clé.',
+          });
+        }
+        const populatedPreviousOrder = await populateOrder(Order.findById(previousOrder._id));
+        return res.status(200).json({
+          success: true,
+          duplicate: true,
+          message: 'Cette commande avait déjà été enregistrée.',
+          order: sanitizeOrderForResponse(populatedPreviousOrder),
+        });
+      }
+    }
+
     const restaurantExists = await Restaurant.findById(restaurant).select(
-      '_id owner latitude longitude location address city country deliveryFee'
+      '_id owner latitude longitude location address city country deliveryFee minimumOrderAmount currency isActive isOpen'
     );
 
     if (!restaurantExists) {
@@ -662,92 +716,100 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const normalizedItems = normalizeItems(items);
+    if (restaurantExists.isActive === false || restaurantExists.isOpen === false) {
+      return res.status(409).json({
+        success: false,
+        message: restaurantExists.isOpen === false
+          ? 'Ce restaurant est actuellement fermé.'
+          : 'Ce restaurant ne prend pas de commandes pour le moment.',
+      });
+    }
 
-    const invalidItem = normalizedItems.find(
-      (item) =>
+    // Only menu IDs and quantities are trusted from the mobile client.
+    const requestedItems = normalizeItems(items);
+    if (
+      requestedItems.length === 0 ||
+      requestedItems.length > 50 ||
+      requestedItems.some((item) =>
         !item.menuItem ||
         !isValidObjectId(item.menuItem) ||
-        !item.name ||
-        item.quantity <= 0 ||
-        !Number.isFinite(item.quantity) ||
-        item.price < 0 ||
-        !Number.isFinite(item.price)
-    );
-
-    if (invalidItem) {
+        !Number.isInteger(item.quantity) ||
+        item.quantity < 1 ||
+        item.quantity > 99
+      )
+    ) {
       return res.status(400).json({
         success: false,
+        code: 'INVALID_ORDER_ITEMS',
         message: 'Un ou plusieurs articles du panier sont invalides.',
       });
     }
 
-    const itemsSubtotal = roundMoney(
-      normalizedItems.reduce((sum, item) => {
-        return sum + roundMoney(item.price) * normalizeNumber(item.quantity, 0);
-      }, 0)
-    );
+    const menuItemIds = [...new Set(requestedItems.map((item) => String(item.menuItem)))];
+    const menuItems = await MenuItem.find({
+      _id: { $in: menuItemIds },
+      restaurant: restaurantExists._id,
+      available: true,
+    })
+      .select('_id name price image')
+      .lean();
 
-    const safeDeliveryFee = roundMoney(
-      deliveryFee ?? restaurantExists?.deliveryFee ?? 0
-    );
-
-    // Don "Afro Impact" optionnel choisi par le client au checkout -
-    // jamais deduit automatiquement, borne pour eviter une saisie absurde.
-    const safeDonationAmount = roundMoney(
-      Math.min(Math.max(normalizeNumber(donationAmount, 0), 0), 100)
-    );
-
-    const expectedTotal = roundMoney(
-      itemsSubtotal + safeDeliveryFee + safeDonationAmount
-    );
-    const providedTotal =
-      totalPrice !== undefined && totalPrice !== null
-        ? roundMoney(totalPrice)
-        : null;
-
-    if (
-      providedTotal !== null &&
-      Math.abs(providedTotal - expectedTotal) > 0.01
-    ) {
-      return res.status(400).json({
+    const pricedOrderItems = priceRequestedOrderItems(requestedItems, menuItems);
+    if (!pricedOrderItems) {
+      return res.status(409).json({
         success: false,
-        message:
-          'Le total de la commande est incohérent avec le sous-total, les frais de livraison et le don éventuel.',
-        details: {
-          itemsSubtotal,
-          deliveryFee: safeDeliveryFee,
-          donationAmount: safeDonationAmount,
-          expectedTotal,
-          providedTotal,
-        },
+        code: 'MENU_ITEM_UNAVAILABLE',
+        message: 'Un ou plusieurs plats ne sont plus disponibles dans ce restaurant.',
       });
     }
 
-    let assignedDriverId = null;
-
-    if (deliveryPerson) {
-      const courier = await User.findById(deliveryPerson).select(
-        '_id role accountStatus'
-      );
-
-      if (!courier || normalizeLowerString(courier.role) !== 'livreur') {
-        return res.status(400).json({
-          success: false,
-          message: 'Le livreur sélectionné est invalide.',
-        });
-      }
-
-      if (normalizeLowerString(courier.accountStatus) !== 'active') {
-        return res.status(403).json({
-          success: false,
-          message: 'Ce livreur ne peut pas recevoir de commandes.',
-        });
-      }
-
-      assignedDriverId = courier._id;
+    const normalizedItems = pricedOrderItems.items;
+    const itemsSubtotal = pricedOrderItems.itemsSubtotal;
+    if (itemsSubtotal < normalizeNumber(restaurantExists.minimumOrderAmount, 0)) {
+      return res.status(400).json({
+        success: false,
+        code: 'MINIMUM_ORDER_NOT_MET',
+        message: 'Le montant minimum de commande du restaurant n’est pas atteint.',
+      });
     }
 
+    const safeDeliveryFee = roundMoney(restaurantExists.deliveryFee);
+    const requestedDonation = donationAmount === undefined ? 0 : Number(donationAmount);
+    if (!Number.isFinite(requestedDonation) || requestedDonation < 0 || requestedDonation > 100) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_DONATION_AMOUNT',
+        message: 'Le montant du don est invalide.',
+      });
+    }
+    if (requestedDonation > 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'DONATIONS_UNAVAILABLE',
+        message: 'Les dons ne sont pas disponibles pour le moment.',
+      });
+    }
+
+    const safeDonationAmount = 0;
+    const orderCurrency = normalizeString(restaurantExists.currency || 'EUR').toUpperCase();
+    const expectedTotal = roundMoney(itemsSubtotal + safeDeliveryFee + safeDonationAmount);
+
+    const marketplaceRates = getMarketplaceRates(orderCurrency);
+    if (process.env.NODE_ENV === 'production' && !marketplaceRates) {
+      return res.status(503).json({
+        success: false,
+        code: 'MARKETPLACE_RATES_UNAVAILABLE',
+        message: 'Les taux marketplace ne sont pas configurés pour cette devise.',
+      });
+    }
+
+    const commissionRateBps = marketplaceRates?.commissionBps || 0;
+    const courierPayoutRateBps = marketplaceRates?.courierPayoutBps || 0;
+    const platformCommissionAmount = roundMoney(itemsSubtotal * commissionRateBps / 10000);
+    const restaurantEarning = roundMoney(itemsSubtotal - platformCommissionAmount);
+    const driverEarning = roundMoney(safeDeliveryFee * courierPayoutRateBps / 10000);
+    const platformDeliveryEarning = roundMoney(safeDeliveryFee - driverEarning);
+    const assignedDriverId = null;
     const safeCustomerLocation = normalizeCoordinates(customerLocation);
 
     const safeRestaurantLocation =
@@ -757,35 +819,32 @@ const createOrder = async (req, res) => {
         lng: restaurantExists?.location?.longitude ?? restaurantExists?.longitude,
       });
 
-    const safeDriverEarning = roundMoney(
-      driverEarning ?? safeDeliveryFee
-    );
-
-    if (safeDriverEarning < 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Le gain livreur est invalide.',
-      });
-    }
-
-    const initialStatus = status || 'En attente';
+    const initialStatus = 'En attente';
 
     const newOrder = new Order({
       user: orderUser,
       restaurant,
+      ...(rawIdempotencyKey
+        ? { idempotencyKey: rawIdempotencyKey, requestFingerprint }
+        : {}),
       items: normalizedItems,
       totalPrice: expectedTotal,
-      currency: normalizeString(currency || 'EUR') || 'EUR',
+      currency: orderCurrency,
       deliveryAddress: safeDeliveryAddress,
       status: initialStatus,
-      paymentStatus: paymentStatus || 'Non payé',
+      paymentStatus: 'Non payé',
       deliveryPerson: assignedDriverId,
-      notes: normalizeString(notes),
+      notes: normalizeString(notes).slice(0, 500),
       customerLocation: safeCustomerLocation,
       restaurantLocation: safeRestaurantLocation,
       deliveryFee: safeDeliveryFee,
       donationAmount: safeDonationAmount,
-      driverEarning: safeDriverEarning,
+      driverEarning,
+      commissionRateBps,
+      courierPayoutRateBps,
+      platformCommissionAmount,
+      restaurantEarning,
+      platformDeliveryEarning,
       statusHistory: [
         {
           status: initialStatus,
@@ -807,6 +866,33 @@ const createOrder = async (req, res) => {
       order: safeOrder,
     });
   } catch (error) {
+    if (error?.code === 11000 && rawIdempotencyKey && orderUser) {
+      try {
+        const existingOrder = await Order.findOne({
+          user: orderUser,
+          idempotencyKey: rawIdempotencyKey,
+        });
+        if (existingOrder) {
+          if (existingOrder.requestFingerprint !== requestFingerprint) {
+            return res.status(409).json({
+              success: false,
+              code: 'IDEMPOTENCY_KEY_REUSED',
+              message: 'Cette clé a déjà été utilisée pour une autre commande. Relance avec une nouvelle clé.',
+            });
+          }
+          const populatedExistingOrder = await populateOrder(Order.findById(existingOrder._id));
+          return res.status(200).json({
+            success: true,
+            duplicate: true,
+            message: 'Cette commande avait déjà été enregistrée.',
+            order: sanitizeOrderForResponse(populatedExistingOrder),
+          });
+        }
+      } catch (lookupError) {
+        console.error('Erreur vérification idempotence commande :', lookupError.message);
+      }
+    }
+
     console.error('Erreur création commande :', {
       message: error.message,
       stack: error.stack,
