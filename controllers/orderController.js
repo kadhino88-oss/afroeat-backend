@@ -605,7 +605,6 @@ const createOrder = async (req, res) => {
       customerLocation,
       restaurantLocation,
       deliveryFee,
-      driverEarning,
       donationAmount,
     } = req.body;
 
