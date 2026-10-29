@@ -572,7 +572,7 @@ const handleWebhook = async (req, res) => {
             {
               _id: orderId,
               stripePaymentIntentId: paymentIntent.id,
-              paymentStatus: { $ne: 'Payé' },
+              paymentStatus: { $nin: ['Payé', 'Remboursé'] },
             },
             {
               paymentStatus: 'Non payé',
@@ -596,7 +596,7 @@ const handleWebhook = async (req, res) => {
             {
               _id: orderId,
               stripeCheckoutSessionId: session.id,
-              paymentStatus: { $ne: 'Payé' },
+              paymentStatus: { $nin: ['Payé', 'Remboursé'] },
             },
             {
               paymentStatus: 'Non payé',
