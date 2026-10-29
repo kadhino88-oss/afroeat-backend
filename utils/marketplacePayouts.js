@@ -4,8 +4,21 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 
-const isConnectPayoutsEnabled = () =>
-  String(process.env.STRIPE_CONNECT_PAYOUTS_ENABLED || '').trim().toLowerCase() === 'true';
+const isConnectPayoutsEnabled = () => {
+  if (
+    String(process.env.STRIPE_CONNECT_PAYOUTS_ENABLED || '').trim().toLowerCase() !== 'true'
+  ) {
+    return false;
+  }
+
+  const secretKey = String(process.env.STRIPE_SECRET_KEY || '').trim();
+  if (process.env.NODE_ENV === 'production') {
+    return secretKey.startsWith('sk_live_');
+  }
+
+  // Local, test and staging environments must never send real-money transfers.
+  return secretKey.startsWith('sk_test_');
+};
 
 const listCountryCodes = (value) => String(value || '')
   .split(',')
