@@ -619,8 +619,9 @@ const getAvailablePaymentMethods = (req, res) => {
     methods: {
       // This backend snapshot is not cleared for production marketplace
       // payments: it does not contain the required Connect/payout controls.
+      // This snapshot mounts the payment router only when Stripe is configured.
       card: !isProduction && stripeConfigured,
-      cash: !isProduction,
+      cash: !isProduction && stripeConfigured,
     },
   });
 };
