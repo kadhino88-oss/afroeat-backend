@@ -8,6 +8,7 @@ const {
   toStripeAmount,
   isPartialRefundCharge,
   isConnectPayoutsEnabled,
+  validatePayoutPaymentIntent,
 } = require('../utils/marketplacePayouts');
 
 const envKeys = [
@@ -132,5 +133,93 @@ test('Connect payouts require explicit opt-in and an environment-matching Stripe
     STRIPE_SECRET_KEY: 'sk_live_unit',
   }, () => {
     assert.equal(isConnectPayoutsEnabled(), true);
+  });
+});
+
+
+test('payout validation binds a succeeded PaymentIntent to the stored order and amount', () => {
+  const order = {
+    _id: '650000000000000000000001',
+    user: '650000000000000000000002',
+    totalPrice: 24.5,
+    currency: 'CHF',
+    stripePaymentIntentId: 'pi_expected',
+  };
+  const intent = {
+    id: 'pi_expected',
+    status: 'succeeded',
+    metadata: {
+      orderId: order._id,
+      userId: order.user,
+    },
+    amount: 2450,
+    currency: 'chf',
+    latest_charge: { id: 'ch_expected' },
+  };
+
+  assert.deepEqual(validatePayoutPaymentIntent(order, intent), {
+    valid: true,
+    reason: null,
+    chargeId: 'ch_expected',
+  });
+});
+
+test('payout validation rejects a successful intent if amount, currency, order or user differ', () => {
+  const order = {
+    _id: '650000000000000000000001',
+    user: '650000000000000000000002',
+    totalPrice: 24.5,
+    currency: 'CHF',
+    stripePaymentIntentId: 'pi_expected',
+  };
+  const intent = {
+    id: 'pi_expected',
+    status: 'succeeded',
+    metadata: {
+      orderId: order._id,
+      userId: order.user,
+    },
+    amount: 2450,
+    currency: 'chf',
+    latest_charge: { id: 'ch_expected' },
+  };
+  const invalidIntents = [
+    { ...intent, amount: 1 },
+    { ...intent, currency: 'eur' },
+    { ...intent, metadata: { ...intent.metadata, orderId: '650000000000000000000099' } },
+    { ...intent, metadata: { ...intent.metadata, userId: '650000000000000000000099' } },
+    { ...intent, status: 'processing' },
+    { ...intent, id: 'pi_other' },
+  ];
+
+  for (const invalidIntent of invalidIntents) {
+    assert.equal(validatePayoutPaymentIntent(order, invalidIntent).valid, false);
+  }
+});
+
+test('payout validation blocks an otherwise valid intent when no charge is attached', () => {
+  const order = {
+    _id: '650000000000000000000001',
+    user: '650000000000000000000002',
+    totalPrice: 24.5,
+    currency: 'CHF',
+    stripePaymentIntentId: 'pi_expected',
+  };
+  const intent = {
+    id: 'pi_expected',
+    status: 'succeeded',
+    metadata: {
+      orderId: order._id,
+      userId: order.user,
+    },
+    amount: 2450,
+    currency: 'chf',
+    latest_charge: null,
+  };
+
+  assert.deepEqual(validatePayoutPaymentIntent(order, intent), {
+    valid: false,
+    reason: 'charge_missing',
+    chargeId: null,
   });
 });
