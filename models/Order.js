@@ -307,6 +307,20 @@ const orderSchema = new mongoose.Schema(
       index: true,
     },
 
+    idempotencyKey: {
+      type: String,
+      trim: true,
+      maxlength: [128, 'La clé d’idempotence est trop longue'],
+      default: undefined,
+    },
+
+    requestFingerprint: {
+      type: String,
+      trim: true,
+      maxlength: [64, 'L’empreinte de commande est invalide'],
+      default: undefined,
+    },
+
     notes: {
       type: String,
       default: '',
@@ -395,6 +409,15 @@ orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ status: 1, deliveryPerson: 1, updatedAt: -1 });
 orderSchema.index({ restaurant: 1, status: 1, createdAt: -1 });
 orderSchema.index({ user: 1, status: 1, createdAt: -1 });
+// Unique only for orders created with a client-supplied idempotency key.
+orderSchema.index(
+  { user: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: 'string' } },
+    name: 'unique_user_idempotency_key',
+  }
+);
 
 const validateGeoPoint = (point) => {
   if (!point) return true;
