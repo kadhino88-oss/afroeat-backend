@@ -1,7 +1,7 @@
 'use strict';
 
 const normalizeString = (value) => String(value ?? '').trim();
-const roundMoney = (value) => Number(Number(value).toFixed(2));
+const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 
 /**
  * Build order items from persisted menu records. Client-provided prices, names,
