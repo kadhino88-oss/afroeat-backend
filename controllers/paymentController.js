@@ -610,6 +610,21 @@ const handleWebhook = async (req, res) => {
   return res.status(200).json({ received: true });
 };
 
+const getAvailablePaymentMethods = (req, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY);
+
+  return res.status(200).json({
+    success: true,
+    methods: {
+      // This backend snapshot is not cleared for production marketplace
+      // payments: it does not contain the required Connect/payout controls.
+      card: !isProduction && stripeConfigured,
+      cash: !isProduction,
+    },
+  });
+};
+
 const selectCashPayment = async (req, res) => {
   if (process.env.NODE_ENV === 'production') {
     return res.status(503).json({
@@ -737,6 +752,7 @@ const refundPayment = async (req, res) => {
 };
 
 module.exports = {
+  getAvailablePaymentMethods,
   createPaymentIntent,
   createCheckoutSession,
   confirmPayment,
