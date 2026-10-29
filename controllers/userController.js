@@ -122,6 +122,9 @@ const formatDriver = (user) => ({
   role: user.role || 'livreur',
   phone: user.phone || '',
   accountStatus: user.accountStatus || 'pending_verification',
+  isIdentityVerified: user.isIdentityVerified === true,
+  isWorkAuthorized: user.isWorkAuthorized === true,
+  isAvailable: user.isAvailable === true,
   createdAt: user.createdAt || null,
 });
 
@@ -558,8 +561,17 @@ const getDrivers = async (req, res) => {
       role: 'livreur',
     };
 
-    if (status === 'active') {
+    // The default directory is an assignment picker: expose only couriers
+    // who have an active account, verified identity/work status, and are online.
+    // Only admins may request the full unfiltered directory with ?status=all.
+    const requireAssignableCourier =
+      req.user.role !== 'admin' || status === 'active';
+
+    if (requireAssignableCourier) {
       filter.accountStatus = { $in: driverVisibleStatuses };
+      filter.isIdentityVerified = true;
+      filter.isWorkAuthorized = true;
+      filter.isAvailable = true;
     }
 
     if (search) {
@@ -581,7 +593,7 @@ const getDrivers = async (req, res) => {
 
     const [drivers, total] = await Promise.all([
       User.find(filter)
-        .select('_id name email role phone accountStatus createdAt')
+        .select('_id name email role phone accountStatus isIdentityVerified isWorkAuthorized isAvailable createdAt')
         .sort(sortOption)
         .skip(skip)
         .limit(limit),
