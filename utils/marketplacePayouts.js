@@ -208,20 +208,20 @@ const reverseOrderTransfers = async (order, charge) => {
   if (order.payoutStatus === 'manually_reconciled') {
     return { success: true, reason: 'manually_reconciled' };
   }
-  if (!order.stripeRestaurantTransferId && !order.stripeCourierTransferId) {
-    order.payoutStatus = 'reversed';
-    order.payoutError = '';
-    order.payoutUpdatedAt = new Date();
-    await order.save();
-    return { success: true };
-  }
-
   if (Number(charge?.amount_refunded || 0) < Number(charge?.amount || 0)) {
     await markReconciliationRequired(
       order,
       'Remboursement partiel : les transferts doivent être rapprochés manuellement.'
     );
     return { success: false, reason: 'partial_refund' };
+  }
+
+  if (!order.stripeRestaurantTransferId && !order.stripeCourierTransferId) {
+    order.payoutStatus = 'reversed';
+    order.payoutError = '';
+    order.payoutUpdatedAt = new Date();
+    await order.save();
+    return { success: true };
   }
 
   try {
