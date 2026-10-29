@@ -1,4 +1,6 @@
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? require('stripe')(process.env.STRIPE_SECRET_KEY)
+  : null;
 const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const User = require('../models/User');
@@ -41,9 +43,15 @@ const getMinAmount = (currency) => {
   return config ? config.minAmount : null;
 };
 
-const isProductionMarketplacePaymentsEnabled = () =>
-  process.env.NODE_ENV !== 'production' &&
-  Boolean(process.env.STRIPE_SECRET_KEY);
+const canCreateDevelopmentCardPayment = () =>
+  process.env.NODE_ENV !== 'production' && Boolean(stripe);
+
+const stripeUnavailable = (res) =>
+  res.status(503).json({
+    success: false,
+    code: 'STRIPE_NOT_CONFIGURED',
+    message: 'Les paiements par carte sont temporairement indisponibles.',
+  });
 
 const getOrderAmount = (order) => {
   return roundMoney(order?.totalPrice || 0);
@@ -144,6 +152,8 @@ const ensureStripeCustomer = async (order) => {
 
 const createPaymentIntent = async (req, res) => {
   try {
+    if (!stripe) return stripeUnavailable(res);
+
     const { orderId } = req.body;
 
     if (!orderId || !isValidObjectId(orderId)) {
@@ -165,13 +175,15 @@ const createPaymentIntent = async (req, res) => {
     // This repository snapshot does not implement Stripe Connect onboarding,
     // approved split rates or payout reconciliation. Fail closed in production
     // until those marketplace controls are implemented and tested.
-    if (!isProductionMarketplacePaymentsEnabled()) {
+    if (process.env.NODE_ENV === 'production') {
       return res.status(503).json({
         success: false,
         code: 'MARKETPLACE_PAYMENTS_NOT_READY',
-        message: 'Les paiements marketplace sont désactivés en production tant que les versements AFROEAT ne sont pas configurés et vérifiés.',
+        message: 'Les paiements marketplace attendent la configuration et la validation des versements AFROEAT.',
       });
     }
+
+    if (!canCreateDevelopmentCardPayment()) return stripeUnavailable(res);
 
     const currency = normalizeString(order.currency, 'EUR').toUpperCase();
     const amount = getOrderAmount(order);
@@ -245,6 +257,8 @@ const createPaymentIntent = async (req, res) => {
 
 const createCheckoutSession = async (req, res) => {
   try {
+    if (!stripe) return stripeUnavailable(res);
+
     const { orderId } = req.body;
 
     if (!orderId || !isValidObjectId(orderId)) {
@@ -263,14 +277,33 @@ const createCheckoutSession = async (req, res) => {
       });
     }
 
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({
+        success: false,
+        code: 'MARKETPLACE_PAYMENTS_NOT_READY',
+        message: 'Les paiements marketplace attendent la configuration et la validation des versements AFROEAT.',
+      });
+    }
+
+    if (!canCreateDevelopmentCardPayment()) return stripeUnavailable(res);
+
     const currency = normalizeString(order.currency, 'EUR').toUpperCase();
     const amount = getOrderAmount(order);
     const minAmount = getMinAmount(currency);
 
-    if (amount < minAmount) {
+    if (minAmount === null) {
       return res.status(400).json({
         success: false,
-        message: `Le montant minimum pour ${currency} est ${minAmount}.`,
+        code: 'UNSUPPORTED_CURRENCY',
+        message: `La devise ${currency} n’est pas prise en charge pour les paiements en ligne.`,
+      });
+    }
+
+    if (amount < minAmount || !Number.isSafeInteger(toStripeAmount(amount, currency))) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_PAYMENT_AMOUNT',
+        message: `Le montant de la commande n’est pas valide pour ${currency}.`,
       });
     }
 
@@ -353,6 +386,8 @@ const createCheckoutSession = async (req, res) => {
 
 const confirmPayment = async (req, res) => {
   try {
+    if (!stripe) return stripeUnavailable(res);
+
     const { orderId, paymentIntentId, checkoutSessionId } = req.body;
 
     if (!orderId || !isValidObjectId(orderId)) {
@@ -612,16 +647,16 @@ const handleWebhook = async (req, res) => {
 
 const getAvailablePaymentMethods = (req, res) => {
   const isProduction = process.env.NODE_ENV === 'production';
-  const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY);
 
   return res.status(200).json({
     success: true,
     methods: {
-      // This backend snapshot is not cleared for production marketplace
-      // payments: it does not contain the required Connect/payout controls.
-      // This snapshot mounts the payment router only when Stripe is configured.
-      card: !isProduction && stripeConfigured,
-      cash: !isProduction && stripeConfigured,
+      // Production remains fail-closed until Connect, approved splits and
+      // payout reconciliation are implemented and reviewed.
+      card: !isProduction && Boolean(stripe),
+      // Cash remains unavailable in production until collection and
+      // settlement reconciliation are implemented.
+      cash: !isProduction,
     },
   });
 };
@@ -683,6 +718,8 @@ const selectCashPayment = async (req, res) => {
 
 const refundPayment = async (req, res) => {
   try {
+    if (!stripe) return stripeUnavailable(res);
+
     if (req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
