@@ -6,6 +6,7 @@ const Order = require('../models/Order');
 const {
   reconcileOrderPayout,
   isPartnerReadyForTransfers,
+  isConnectPayoutsEnabled,
 } = require('../utils/marketplacePayouts');
 
 const getStripe = () => {
@@ -83,7 +84,7 @@ const getConnectStatus = async (req, res) => {
         success: true,
         connected: false,
         accountReady: false,
-        payoutsFeatureEnabled: require('../utils/marketplacePayouts').isConnectPayoutsEnabled(),
+        payoutsFeatureEnabled: isConnectPayoutsEnabled(),
         detailsSubmitted: false,
         transfersEnabled: false,
         payoutsEnabled: false,
