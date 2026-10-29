@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   evaluateCourierAssignmentEligibility,
+  validateCourierVerificationUpdate,
 } = require('../utils/courierAssignmentEligibility');
 
 const eligibleCourier = () => ({
@@ -74,4 +75,56 @@ test('fails closed for missing verification and availability values', () => {
   });
   assert.equal(result.ok, false);
   assert.equal(result.code, 'COURIER_IDENTITY_NOT_VERIFIED');
+});
+
+
+test('requires explicit boolean values for both verification decisions', () => {
+  const result = validateCourierVerificationUpdate({ isIdentityVerified: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'COURIER_VERIFICATION_FLAGS_REQUIRED');
+});
+
+test('does not authorize work before identity verification', () => {
+  const result = validateCourierVerificationUpdate({
+    isIdentityVerified: false,
+    isWorkAuthorized: true,
+    note: 'Autorisation vérifiée',
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'WORK_AUTH_REQUIRES_IDENTITY_VERIFICATION');
+});
+
+test('requires an audit note before marking a courier verified', () => {
+  const result = validateCourierVerificationUpdate({
+    isIdentityVerified: true,
+    isWorkAuthorized: false,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'COURIER_VERIFICATION_NOTE_REQUIRED');
+});
+
+test('accepts an explicit documented review decision', () => {
+  const result = validateCourierVerificationUpdate({
+    isIdentityVerified: true,
+    isWorkAuthorized: true,
+    note: 'Pièce contrôlée, autorisation valide',
+  });
+  assert.deepEqual(result, {
+    ok: true,
+    status: 200,
+    code: 'COURIER_VERIFICATION_VALID',
+    isIdentityVerified: true,
+    isWorkAuthorized: true,
+    note: 'Pièce contrôlée, autorisation valide',
+  });
+});
+
+test('rejects overlong audit notes', () => {
+  const result = validateCourierVerificationUpdate({
+    isIdentityVerified: true,
+    isWorkAuthorized: true,
+    note: 'x'.repeat(501),
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'COURIER_VERIFICATION_NOTE_TOO_LONG');
 });
