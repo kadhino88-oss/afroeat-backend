@@ -27,8 +27,11 @@ const getPublicApiUrl = () => {
     throw new Error('PUBLIC_API_URL doit utiliser HTTPS.');
   }
   if (process.env.NODE_ENV === 'production' &&
-      ['localhost', '127.0.0.1'].includes(url.hostname.toLowerCase())) {
-    throw new Error('PUBLIC_API_URL ne peut pas utiliser localhost en production.');
+      (
+        ['localhost', '127.0.0.1'].includes(url.hostname.toLowerCase()) ||
+        ['.invalid', '.example', '.test'].some((suffix) => url.hostname.toLowerCase().endsWith(suffix))
+      )) {
+    throw new Error('PUBLIC_API_URL doit utiliser un domaine public réel en production.');
   }
   return url.toString().replace(/\/$/, '');
 };
