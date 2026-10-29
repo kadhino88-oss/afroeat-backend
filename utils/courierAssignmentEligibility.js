@@ -113,7 +113,33 @@ const validateCourierVerificationUpdate = (payload = {}) => {
   };
 };
 
+const evaluateCourierAvailabilityChange = (courier, available) => {
+  if (!courier || normalize(courier.role) !== 'livreur') {
+    return {
+      ok: false,
+      status: 400,
+      code: 'INVALID_COURIER',
+      message: 'Compte livreur invalide.',
+    };
+  }
+
+  if (available === true && (
+    courier.isIdentityVerified !== true ||
+    courier.isWorkAuthorized !== true
+  )) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'COURIER_VERIFICATION_REQUIRED',
+      message: 'L’identité et l’autorisation de travail doivent être vérifiées avant d’activer la disponibilité.',
+    };
+  }
+
+  return { ok: true, status: 200, code: 'COURIER_AVAILABILITY_VALID', message: '' };
+};
+
 module.exports = {
   evaluateCourierAssignmentEligibility,
   validateCourierVerificationUpdate,
+  evaluateCourierAvailabilityChange,
 };
