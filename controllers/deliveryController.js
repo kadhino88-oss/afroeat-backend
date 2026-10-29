@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const { sendPushToUser } = require('../utils/pushNotifications');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
+const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const normalizeString = (value) => String(value || '').trim();
@@ -734,6 +735,15 @@ const updateDeliveryMissionStatus = async (req, res) => {
     });
 
     await order.save();
+
+    if (nextStatus === 'Livrée') {
+      try {
+        await createDeliveredOrderTransfers(order._id);
+      } catch (payoutError) {
+        // Delivery status is persisted even if external Stripe reconciliation fails.
+        console.error('AFROEAT PAYOUT RECONCILIATION ERROR =>', payoutError?.message);
+      }
+    }
 
     sendPushToUser(order.user, {
       title: 'Afroeat',
