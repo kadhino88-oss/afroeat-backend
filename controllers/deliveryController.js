@@ -5,6 +5,7 @@ const User = require('../models/User');
 const { sendPushToUser } = require('../utils/pushNotifications');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
+const { sanitizeOrderForViewer } = require('../utils/orderResponseSanitizer');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const normalizeString = (value) => String(value || '').trim();
@@ -166,7 +167,8 @@ const computeEtaLabel = (order) => {
 };
 
 const buildOrderLiveMeta = (order) => {
-  const safeOrder = order?.toObject ? order.toObject() : order || {};
+  const rawOrder = order?.toObject ? order.toObject() : order || {};
+  const safeOrder = sanitizeOrderForViewer(rawOrder, 'livreur');
 
   const driverLocation = safeOrder?.deliveryLocation
     ? {
