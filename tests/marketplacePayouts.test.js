@@ -12,6 +12,8 @@ const {
 
 const envKeys = [
   'STRIPE_CONNECT_PAYOUTS_ENABLED',
+  'STRIPE_SECRET_KEY',
+  'NODE_ENV',
   'STRIPE_PLATFORM_COUNTRY',
   'STRIPE_CONNECT_COUNTRIES',
   'STRIPE_CONNECT_CROSS_BORDER_COUNTRIES',
@@ -83,17 +85,52 @@ test('classifies partial refunds even before any transfer exists', () => {
   assert.equal(isPartialRefundCharge({ amount: 10000, amount_refunded: NaN }), false);
 });
 
-test('Connect payouts remain disabled unless explicitly enabled', () => {
-  const previous = process.env.STRIPE_CONNECT_PAYOUTS_ENABLED;
-  delete process.env.STRIPE_CONNECT_PAYOUTS_ENABLED;
-  try {
+test('Connect payouts require explicit opt-in and an environment-matching Stripe key', () => {
+  withEnv({
+    NODE_ENV: 'test',
+    STRIPE_CONNECT_PAYOUTS_ENABLED: 'false',
+    STRIPE_SECRET_KEY: 'sk_test_unit',
+  }, () => {
     assert.equal(isConnectPayoutsEnabled(), false);
-    process.env.STRIPE_CONNECT_PAYOUTS_ENABLED = 'false';
+  });
+
+  withEnv({
+    NODE_ENV: 'test',
+    STRIPE_SECRET_KEY: 'sk_test_unit',
+  }, () => {
+    delete process.env.STRIPE_CONNECT_PAYOUTS_ENABLED;
     assert.equal(isConnectPayoutsEnabled(), false);
-    process.env.STRIPE_CONNECT_PAYOUTS_ENABLED = 'true';
+  });
+
+  withEnv({
+    NODE_ENV: 'test',
+    STRIPE_CONNECT_PAYOUTS_ENABLED: 'true',
+    STRIPE_SECRET_KEY: 'sk_test_unit',
+  }, () => {
     assert.equal(isConnectPayoutsEnabled(), true);
-  } finally {
-    if (previous === undefined) delete process.env.STRIPE_CONNECT_PAYOUTS_ENABLED;
-    else process.env.STRIPE_CONNECT_PAYOUTS_ENABLED = previous;
-  }
+  });
+
+  withEnv({
+    NODE_ENV: 'test',
+    STRIPE_CONNECT_PAYOUTS_ENABLED: 'true',
+    STRIPE_SECRET_KEY: 'sk_live_unit',
+  }, () => {
+    assert.equal(isConnectPayoutsEnabled(), false);
+  });
+
+  withEnv({
+    NODE_ENV: 'production',
+    STRIPE_CONNECT_PAYOUTS_ENABLED: 'true',
+    STRIPE_SECRET_KEY: 'sk_test_unit',
+  }, () => {
+    assert.equal(isConnectPayoutsEnabled(), false);
+  });
+
+  withEnv({
+    NODE_ENV: 'production',
+    STRIPE_CONNECT_PAYOUTS_ENABLED: 'true',
+    STRIPE_SECRET_KEY: 'sk_live_unit',
+  }, () => {
+    assert.equal(isConnectPayoutsEnabled(), true);
+  });
 });
