@@ -7,6 +7,7 @@ const {
   createPaymentIntent,
   createCheckoutSession,
   confirmPayment,
+  selectCashPayment,
   handleWebhook,
   refundPayment,
 } = require('../controllers/paymentController');
@@ -33,6 +34,13 @@ router.post(
   protect,
   allowRoles('client', 'admin'),
   confirmPayment
+);
+
+router.post(
+  '/select-cash',
+  protect,
+  allowRoles('client', 'admin'),
+  selectCashPayment
 );
 
 router.post(
