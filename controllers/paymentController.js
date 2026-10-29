@@ -16,6 +16,7 @@ const {
 } = require('../utils/marketplacePayouts');
 const { handleConnectedAccountUpdated } = require('./connectController');
 const { evaluatePaymentChannel } = require('../utils/paymentChannel');
+const { getOrderPaymentCreationBlock } = require('../utils/orderPaymentGuard');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -137,13 +138,8 @@ const getAuthorizedOrder = async (orderId, req) => {
     return { errorStatus: 403, errorMessage: 'Accès non autorisé à cette commande.' };
   }
 
-  if (order.paymentStatus === 'Payé') {
-    return { errorStatus: 409, errorMessage: 'Cette commande a déjà été payée.' };
-  }
-
-  if (order.status === 'Annulée') {
-    return { errorStatus: 409, errorMessage: 'Impossible de payer une commande annulée.' };
-  }
+  const paymentBlock = getOrderPaymentCreationBlock(order);
+  if (paymentBlock) return paymentBlock;
 
   return { order };
 };
