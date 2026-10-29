@@ -286,6 +286,13 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    marketplaceSplitCalculated: { type: Boolean, default: false },
+    commissionRateBps: { type: Number, default: 0, min: 0, max: 10000, validate: { validator: Number.isInteger, message: 'Taux commission invalide' } },
+    courierPayoutRateBps: { type: Number, default: 0, min: 0, max: 10000, validate: { validator: Number.isInteger, message: 'Taux de versement livreur invalide' } },
+    platformCommissionAmount: { type: Number, default: 0, min: 0, validate: { validator: Number.isFinite, message: 'Commission plateforme invalide' } },
+    restaurantEarning: { type: Number, default: 0, min: 0, validate: { validator: Number.isFinite, message: 'Revenu restaurant invalide' } },
+    platformDeliveryEarning: { type: Number, default: 0, min: 0, validate: { validator: Number.isFinite, message: 'Revenu livraison plateforme invalide' } },
+
     deliveryAddress: {
       type: String,
       required: [true, 'L’adresse de livraison est obligatoire'],
@@ -359,6 +366,25 @@ const orderSchema = new mongoose.Schema(
       trim: true,
       maxlength: [500, 'Le message de paiement est trop long'],
     },
+
+    stripeAmountRefunded: { type: Number, default: 0, min: 0, validate: { validator: Number.isFinite, message: 'Montant remboursé invalide' } },
+    payoutStatus: {
+      type: String,
+      enum: ['pending', 'processing', 'transferred', 'reversed', 'manually_reconciled', 'not_applicable', 'reconciliation_required'],
+      default: 'pending',
+      index: true,
+    },
+    payoutError: { type: String, default: '', trim: true, maxlength: 500 },
+    payoutUpdatedAt: { type: Date, default: null },
+    payoutResolvedAt: { type: Date, default: null },
+    payoutResolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    payoutResolutionNote: { type: String, default: '', trim: true, maxlength: 500 },
+    stripeRestaurantTransferId: { type: String, default: null, trim: true },
+    stripeCourierTransferId: { type: String, default: null, trim: true },
+    stripeRestaurantReversalId: { type: String, default: null, trim: true },
+    stripeCourierReversalId: { type: String, default: null, trim: true },
+    stripeDisputeId: { type: String, default: null, trim: true },
+    stripeDisputeClosedAt: { type: Date, default: null },
 
     deliveryPerson: {
       type: mongoose.Schema.Types.ObjectId,
@@ -662,9 +688,14 @@ orderSchema.pre('save', function () {
     this.totalPrice = roundMoney(this.totalPrice);
   }
 
-  this.driverEarning = roundMoney(
-    this.driverEarning > 0 ? this.driverEarning : this.deliveryFee
-  );
+  // Preserve legacy earnings for old orders, but allow a calculated marketplace
+  // split to legitimately assign zero to the courier.
+  this.driverEarning = this.marketplaceSplitCalculated
+    ? roundMoney(this.driverEarning)
+    : roundMoney(this.driverEarning > 0 ? this.driverEarning : this.deliveryFee);
+  this.platformCommissionAmount = roundMoney(this.platformCommissionAmount);
+  this.restaurantEarning = roundMoney(this.restaurantEarning);
+  this.platformDeliveryEarning = roundMoney(this.platformDeliveryEarning);
 
   this.notes = normalizeString(this.notes);
   this.deliveryAddress = normalizeString(this.deliveryAddress);
