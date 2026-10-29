@@ -9,6 +9,7 @@ const {
   isMatchingCheckoutSession,
 } = require('../utils/paymentValidation');
 const { isFullyRefundedCharge } = require('../utils/refundGuards');
+const { evaluatePaymentChannel } = require('../utils/paymentChannel');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -183,6 +184,15 @@ const createPaymentIntent = async (req, res) => {
       });
     }
 
+    const channelDecision = evaluatePaymentChannel(order, 'card');
+    if (!channelDecision.allowed) {
+      return res.status(409).json({
+        success: false,
+        code: channelDecision.code,
+        message: channelDecision.message,
+      });
+    }
+
     // This repository snapshot does not implement Stripe Connect onboarding,
     // approved split rates or payout reconciliation. Fail closed in production
     // until those marketplace controls are implemented and tested.
@@ -194,7 +204,6 @@ const createPaymentIntent = async (req, res) => {
       });
     }
 
-    if (!stripe) return stripeUnavailable(res);
     if (!canCreateDevelopmentCardPayment()) return stripeTestKeyRequired(res);
 
     const currency = normalizeString(order.currency, 'EUR').toUpperCase();
@@ -286,6 +295,15 @@ const createCheckoutSession = async (req, res) => {
       return res.status(errorStatus).json({
         success: false,
         message: errorMessage,
+      });
+    }
+
+    const channelDecision = evaluatePaymentChannel(order, 'stripe_checkout');
+    if (!channelDecision.allowed) {
+      return res.status(409).json({
+        success: false,
+        code: channelDecision.code,
+        message: channelDecision.message,
       });
     }
 
