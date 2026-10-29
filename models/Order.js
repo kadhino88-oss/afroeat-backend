@@ -272,6 +272,43 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    commissionRateBps: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 10000,
+      validate: { validator: Number.isInteger, message: 'Taux de commission invalide' },
+    },
+
+    courierPayoutRateBps: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 10000,
+      validate: { validator: Number.isInteger, message: 'Taux de versement livreur invalide' },
+    },
+
+    platformCommissionAmount: {
+      type: Number,
+      default: 0,
+      min: [0, 'La commission plateforme ne peut pas être négative'],
+      validate: { validator: Number.isFinite, message: 'Commission plateforme invalide' },
+    },
+
+    restaurantEarning: {
+      type: Number,
+      default: 0,
+      min: [0, 'Le revenu restaurant ne peut pas être négatif'],
+      validate: { validator: Number.isFinite, message: 'Revenu restaurant invalide' },
+    },
+
+    platformDeliveryEarning: {
+      type: Number,
+      default: 0,
+      min: [0, 'Le revenu livraison plateforme ne peut pas être négatif'],
+      validate: { validator: Number.isFinite, message: 'Revenu livraison plateforme invalide' },
+    },
+
     deliveryAddress: {
       type: String,
       required: [true, 'L’adresse de livraison est obligatoire'],
@@ -343,6 +380,20 @@ const orderSchema = new mongoose.Schema(
       default: '',
       trim: true,
       maxlength: [500, 'Le message de paiement est trop long'],
+    },
+
+    idempotencyKey: {
+      type: String,
+      trim: true,
+      maxlength: [128, 'La clé d’idempotence est trop longue'],
+      default: undefined,
+    },
+
+    requestFingerprint: {
+      type: String,
+      trim: true,
+      maxlength: [64, 'L’empreinte de commande est invalide'],
+      default: undefined,
     },
 
     deliveryPerson: {
@@ -442,6 +493,15 @@ orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ status: 1, deliveryPerson: 1, updatedAt: -1 });
 orderSchema.index({ restaurant: 1, status: 1, createdAt: -1 });
 orderSchema.index({ user: 1, status: 1, createdAt: -1 });
+// Unique only for orders created with a client-supplied idempotency key.
+orderSchema.index(
+  { user: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: 'string' } },
+    name: 'unique_user_idempotency_key',
+  }
+);
 
 const validateGeoPoint = (point) => {
   if (!point) return true;
