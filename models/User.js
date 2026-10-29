@@ -81,6 +81,27 @@ const userSchema = new mongoose.Schema(
 
     profileImage: fileUrlField,
 
+    // ISO country for the user's Stripe Connect payout account.
+    countryCode: {
+      type: String,
+      default: '',
+      trim: true,
+      uppercase: true,
+      match: [/^$|^[A-Z]{2}$/, 'Le code pays doit contenir deux lettres'],
+    },
+
+    stripeConnectAccountId: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [120, 'Identifiant Stripe Connect invalide'],
+      index: { sparse: true },
+    },
+    stripeConnectDetailsSubmitted: { type: Boolean, default: false },
+    stripeConnectTransfersEnabled: { type: Boolean, default: false },
+    stripeConnectPayoutsEnabled: { type: Boolean, default: false },
+    stripeConnectRequirementsDueCount: { type: Number, default: 0, min: 0 },
+
     pushToken: {
       type: String,
       default: '',
