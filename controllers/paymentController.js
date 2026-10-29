@@ -852,15 +852,44 @@ const refundPayment = async (req, res) => {
       reason: reason || 'requested_by_customer',
     });
 
-    order.paymentStatus = 'Remboursé';
-    order.refundedAt = new Date();
     order.stripeRefundId = refund.id;
+    if (refund.status === 'succeeded') {
+      order.paymentStatus = 'Remboursé';
+      order.refundedAt = new Date();
+    } else if (refund.status === 'failed' || refund.status === 'canceled') {
+      order.lastPaymentError = 'Stripe a refusé le remboursement : ' + String(refund.status);
+    }
     await order.save();
 
-    return res.status(200).json({
-      success: true,
-      message: 'Remboursement effectué avec succès.',
+    if (refund.status === 'succeeded') {
+      try {
+        const intent = await stripe.paymentIntents.retrieve(order.stripePaymentIntentId, {
+          expand: ['latest_charge'],
+        });
+        const latestCharge = intent.latest_charge;
+        const charge = typeof latestCharge === 'string'
+          ? await stripe.charges.retrieve(latestCharge)
+          : latestCharge;
+        if (charge) await reverseOrderTransfers(order, charge);
+      } catch (reversalError) {
+        // Signed webhook remains the durable retry path if this immediate lookup fails.
+        console.error('REFUND PAYOUT REVERSAL DEFERRED =>', {
+          orderId: String(order._id),
+          message: reversalError?.message,
+          code: reversalError?.code,
+        });
+      }
+    }
+
+    return res.status(refund.status === 'failed' || refund.status === 'canceled' ? 502 : 200).json({
+      success: refund.status !== 'failed' && refund.status !== 'canceled',
+      message: refund.status === 'succeeded'
+        ? 'Remboursement confirmé.'
+        : refund.status === 'pending'
+          ? 'Le remboursement est en cours de traitement par Stripe.'
+          : 'Stripe n’a pas pu terminer le remboursement.',
       refundId: refund.id,
+      refundStatus: refund.status,
       orderId: order._id,
     });
   } catch (error) {
