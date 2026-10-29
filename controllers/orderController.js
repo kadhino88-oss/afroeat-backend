@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
+const MenuItem = require('../models/MenuItem');
 const { sendPushToUser } = require('../utils/pushNotifications');
 const {
   createOrderRequestFingerprint,
@@ -702,7 +703,7 @@ const createOrder = async (req, res) => {
     }
 
     const restaurantExists = await Restaurant.findById(restaurant).select(
-      '_id owner latitude longitude location address city country deliveryFee'
+      '_id owner latitude longitude location address city country deliveryFee minimumOrderAmount currency isActive isOpen'
     );
 
     if (!restaurantExists) {
@@ -712,17 +713,29 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const normalizedItems = normalizeItems(items);
+    if (restaurantExists.isActive === false) {
+      return res.status(409).json({
+        success: false,
+        message: 'Ce restaurant ne prend pas de commandes pour le moment.',
+      });
+    }
 
-    const invalidItem = normalizedItems.find(
+    if (restaurantExists.isOpen === false) {
+      return res.status(409).json({
+        success: false,
+        message: 'Ce restaurant est actuellement fermé.',
+      });
+    }
+
+    // Accept item IDs and quantities only; prices and item details are server-owned.
+    const requestedItems = normalizeItems(items);
+    const invalidItem = requestedItems.find(
       (item) =>
         !item.menuItem ||
         !isValidObjectId(item.menuItem) ||
-        !item.name ||
-        item.quantity <= 0 ||
-        !Number.isFinite(item.quantity) ||
-        item.price < 0 ||
-        !Number.isFinite(item.price)
+        !Number.isInteger(item.quantity) ||
+        item.quantity < 1 ||
+        item.quantity > 99
     );
 
     if (invalidItem) {
@@ -732,72 +745,72 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const itemsSubtotal = roundMoney(
-      normalizedItems.reduce((sum, item) => {
-        return sum + roundMoney(item.price) * normalizeNumber(item.quantity, 0);
-      }, 0)
+    const menuItemIds = [...new Set(requestedItems.map((item) => String(item.menuItem)))];
+    const menuItems = await MenuItem.find({
+      _id: { $in: menuItemIds },
+      restaurant: restaurantExists._id,
+      available: true,
+    })
+      .select('_id name price image')
+      .lean();
+    const menuItemsById = new Map(
+      menuItems.map((item) => [String(item._id), item])
     );
 
-    const safeDeliveryFee = roundMoney(
-      deliveryFee ?? restaurantExists?.deliveryFee ?? 0
-    );
-
-    // Don "Afro Impact" optionnel choisi par le client au checkout -
-    // jamais deduit automatiquement, borne pour eviter une saisie absurde.
-    const safeDonationAmount = roundMoney(
-      Math.min(Math.max(normalizeNumber(donationAmount, 0), 0), 100)
-    );
-
-    const expectedTotal = roundMoney(
-      itemsSubtotal + safeDeliveryFee + safeDonationAmount
-    );
-    const providedTotal =
-      totalPrice !== undefined && totalPrice !== null
-        ? roundMoney(totalPrice)
-        : null;
-
-    if (
-      providedTotal !== null &&
-      Math.abs(providedTotal - expectedTotal) > 0.01
-    ) {
-      return res.status(400).json({
+    if (menuItemsById.size !== menuItemIds.length) {
+      return res.status(409).json({
         success: false,
-        message:
-          'Le total de la commande est incohérent avec le sous-total, les frais de livraison et le don éventuel.',
-        details: {
-          itemsSubtotal,
-          deliveryFee: safeDeliveryFee,
-          donationAmount: safeDonationAmount,
-          expectedTotal,
-          providedTotal,
-        },
+        message: 'Un ou plusieurs plats ne sont plus disponibles dans ce restaurant.',
       });
     }
 
-    let assignedDriverId = null;
+    const normalizedItems = requestedItems.map((requestedItem) => {
+      const menuItem = menuItemsById.get(String(requestedItem.menuItem));
+      return {
+        menuItem: menuItem._id,
+        name: normalizeString(menuItem.name),
+        quantity: requestedItem.quantity,
+        price: roundMoney(menuItem.price),
+        image: normalizeString(menuItem.image),
+        notes: normalizeString(requestedItem.notes).slice(0, 300),
+      };
+    });
 
-    if (deliveryPerson) {
-      const courier = await User.findById(deliveryPerson).select(
-        '_id role accountStatus'
-      );
+    const itemsSubtotal = roundMoney(
+      normalizedItems.reduce((sum, item) => sum + roundMoney(item.price) * item.quantity, 0)
+    );
 
-      if (!courier || normalizeLowerString(courier.role) !== 'livreur') {
-        return res.status(400).json({
-          success: false,
-          message: 'Le livreur sélectionné est invalide.',
-        });
-      }
-
-      if (normalizeLowerString(courier.accountStatus) !== 'active') {
-        return res.status(403).json({
-          success: false,
-          message: 'Ce livreur ne peut pas recevoir de commandes.',
-        });
-      }
-
-      assignedDriverId = courier._id;
+    if (itemsSubtotal < normalizeNumber(restaurantExists.minimumOrderAmount, 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le montant minimum de commande du restaurant n’est pas atteint.',
+      });
     }
 
+    const safeDeliveryFee = roundMoney(restaurantExists.deliveryFee);
+    const requestedDonation = donationAmount === undefined ? 0 : Number(donationAmount);
+    if (
+      !Number.isFinite(requestedDonation) ||
+      requestedDonation < 0 ||
+      requestedDonation > 100
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le montant du don est invalide.',
+      });
+    }
+    if (requestedDonation > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Les dons ne sont pas disponibles pour le moment.',
+      });
+    }
+    const safeDonationAmount = 0;
+    const expectedTotal = roundMoney(itemsSubtotal + safeDeliveryFee + safeDonationAmount);
+    const orderCurrency = normalizeString(restaurantExists.currency || 'EUR').toUpperCase();
+
+    // Courier assignment and its earnings are server-owned fields.
+    const assignedDriverId = null;
     const safeCustomerLocation = normalizeCoordinates(customerLocation);
 
     const safeRestaurantLocation =
@@ -807,9 +820,7 @@ const createOrder = async (req, res) => {
         lng: restaurantExists?.location?.longitude ?? restaurantExists?.longitude,
       });
 
-    const safeDriverEarning = roundMoney(
-      driverEarning ?? safeDeliveryFee
-    );
+    const safeDriverEarning = safeDeliveryFee;
 
     if (safeDriverEarning < 0) {
       return res.status(400).json({
@@ -818,7 +829,7 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const initialStatus = status || 'En attente';
+    const initialStatus = 'En attente';
 
     const newOrder = new Order({
       user: orderUser,
@@ -828,10 +839,10 @@ const createOrder = async (req, res) => {
         : {}),
       items: normalizedItems,
       totalPrice: expectedTotal,
-      currency: normalizeString(currency || 'EUR') || 'EUR',
+      currency: orderCurrency,
       deliveryAddress: safeDeliveryAddress,
       status: initialStatus,
-      paymentStatus: paymentStatus || 'Non payé',
+      paymentStatus: 'Non payé',
       deliveryPerson: assignedDriverId,
       notes: normalizeString(notes),
       customerLocation: safeCustomerLocation,
