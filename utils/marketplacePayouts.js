@@ -115,6 +115,13 @@ const createDeliveredOrderTransfers = async (orderId) => {
   const order = await Order.findById(orderId);
   if (!order) return { skipped: true, reason: 'order_missing' };
   if (order.status !== 'Livrée') return { skipped: true, reason: 'not_delivered' };
+  if (order.marketplaceSplitCalculated !== true) {
+    await markReconciliationRequired(
+      order,
+      'Commande historique sans répartition marketplace vérifiée : contrôle manuel requis.'
+    );
+    return { success: false, reason: 'marketplace_split_missing' };
+  }
   if (order.payoutStatus === 'manually_reconciled') {
     return { success: true, payoutStatus: order.payoutStatus };
   }
