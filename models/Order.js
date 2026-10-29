@@ -382,6 +382,39 @@ const orderSchema = new mongoose.Schema(
       maxlength: [500, 'Le message de paiement est trop long'],
     },
 
+    stripeAmountRefunded: {
+      type: Number,
+      default: 0,
+      min: 0,
+      validate: { validator: Number.isFinite, message: 'Montant remboursé invalide' },
+    },
+
+    payoutStatus: {
+      type: String,
+      enum: [
+        'pending',
+        'processing',
+        'transferred',
+        'reversed',
+        'manually_reconciled',
+        'not_applicable',
+        'reconciliation_required',
+      ],
+      default: 'pending',
+      index: true,
+    },
+    payoutError: { type: String, default: '', trim: true, maxlength: 500 },
+    payoutUpdatedAt: { type: Date, default: null },
+    payoutResolvedAt: { type: Date, default: null },
+    payoutResolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    payoutResolutionNote: { type: String, default: '', trim: true, maxlength: 500 },
+    stripeRestaurantTransferId: { type: String, default: null, trim: true },
+    stripeCourierTransferId: { type: String, default: null, trim: true },
+    stripeRestaurantReversalId: { type: String, default: null, trim: true },
+    stripeCourierReversalId: { type: String, default: null, trim: true },
+    stripeDisputeId: { type: String, default: null, trim: true },
+    stripeDisputeClosedAt: { type: Date, default: null },
+
     idempotencyKey: {
       type: String,
       trim: true,
