@@ -16,7 +16,7 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
-    "dotenv": "^17.3.1",
+    "dotenv": "^18.0.9",
     "expo-server-sdk": "^3.15.0",
     "express": "^5.3.0",
     "express-mongo-sanitize": "^2.2.0",
