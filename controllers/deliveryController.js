@@ -6,6 +6,7 @@ const { sendPushToUser } = require('../utils/pushNotifications');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
 const { sanitizeOrderForViewer } = require('../utils/orderResponseSanitizer');
+const { evaluateCourierAvailabilityChange } = require('../utils/courierAssignmentEligibility');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const normalizeString = (value) => String(value || '').trim();
@@ -532,6 +533,15 @@ const updateMyAvailability = async (req, res) => {
       rawValue === 'true' ||
       rawValue === 1 ||
       rawValue === '1';
+
+    const availabilityDecision = evaluateCourierAvailabilityChange(driver, available);
+    if (!availabilityDecision.ok) {
+      return res.status(availabilityDecision.status).json({
+        success: false,
+        code: availabilityDecision.code,
+        message: availabilityDecision.message,
+      });
+    }
 
     driver.isAvailable = available;
     await driver.save();

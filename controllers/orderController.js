@@ -19,6 +19,7 @@ const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 const { getMarketplaceRates } = require('../config/marketplaceRates');
 const { calculateMarketplaceSplit } = require('../utils/marketplaceAccounting');
 const { sanitizeOrderForViewer } = require('../utils/orderResponseSanitizer');
+const { evaluateCourierAssignmentEligibility } = require('../utils/courierAssignmentEligibility');
 const { isConnectPayoutsEnabled } = require('../utils/marketplacePayouts');
 const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
 
@@ -1063,17 +1064,12 @@ const assignDriverToOrder = async (req, res) => {
       '_id role accountStatus isIdentityVerified isWorkAuthorized isAvailable name'
     );
 
-    if (!courier || normalizeLowerString(courier.role) !== 'livreur') {
-      return res.status(400).json({
+    const courierEligibility = evaluateCourierAssignmentEligibility(courier);
+    if (!courierEligibility.ok) {
+      return res.status(courierEligibility.status).json({
         success: false,
-        message: 'Le livreur sélectionné est invalide.',
-      });
-    }
-
-    if (normalizeLowerString(courier.accountStatus) !== 'active') {
-      return res.status(403).json({
-        success: false,
-        message: 'Ce livreur ne peut pas recevoir de commandes.',
+        code: courierEligibility.code,
+        message: courierEligibility.message,
       });
     }
 

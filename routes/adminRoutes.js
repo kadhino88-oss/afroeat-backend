@@ -8,6 +8,7 @@ const {
   getAdminUsers,
   getAdminUserById,
   updateAdminUserStatus,
+  updateAdminUserVerification,
   getAdminRestaurants,
   getAdminRestaurantById,
   getAdminDrivers,
@@ -72,6 +73,7 @@ router.get('/dashboard', getAdminDashboard);
 router.get('/users', getAdminUsers);
 router.get('/users/:id', getAdminUserById);
 router.put('/users/:id/status', updateAdminUserStatus);
+router.put('/users/:id/verification', updateAdminUserVerification);
 
 /**
  * Restaurants
