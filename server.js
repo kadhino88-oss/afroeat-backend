@@ -57,8 +57,15 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
-if (!process.env.JWT_SECRET || String(process.env.JWT_SECRET).trim().length < 32) {
-  console.error('❌ JWT_SECRET manquant ou trop faible');
+const JWT_SECRET = String(process.env.JWT_SECRET || '').trim();
+const isPlaceholderJwtSecret = /^(replace|change[-_ ]?me|placeholder|example)/i.test(
+  JWT_SECRET
+);
+
+if (!JWT_SECRET || JWT_SECRET.length < 32 || isPlaceholderJwtSecret) {
+  console.error(
+    '❌ JWT_SECRET manquant, trop faible ou encore défini sur une valeur de remplacement'
+  );
   process.exit(1);
 }
 
