@@ -290,10 +290,11 @@ app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/delivery', require('./routes/deliveryRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 
-if (process.env.STRIPE_SECRET_KEY) {
-  const { router: paymentsRouter } = require('./routes/paymentRoutes');
-  app.use('/api/payments', paymentsRouter);
-}
+// Mount payment method discovery and cash selection even when Stripe is
+// not configured. Card/checkout/refund endpoints return 503 in that case.
+// The raw-body webhook remains mounted above only when Stripe is configured.
+const { router: paymentsRouter } = require('./routes/paymentRoutes');
+app.use('/api/payments', paymentsRouter);
 
 app.use('/api', (req, res) => {
   res.status(404).json({
