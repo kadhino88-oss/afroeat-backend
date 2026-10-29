@@ -18,6 +18,7 @@ const { sendPushToUser } = require('../utils/pushNotifications');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 const { getMarketplaceRates } = require('../config/marketplaceRates');
 const { calculateMarketplaceSplit } = require('../utils/marketplaceAccounting');
+const { sanitizeOrderForViewer } = require('../utils/orderResponseSanitizer');
 const { isConnectPayoutsEnabled } = require('../utils/marketplacePayouts');
 const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
 
@@ -308,17 +309,36 @@ const buildOrderTrackingPayload = (order) => {
   };
 };
 
-const sanitizeOrderForResponse = (orderDocument) => {
+const sanitizeOrderForResponse = (orderDocument, viewerRole = '') => {
   if (!orderDocument) {
     return null;
   }
 
-  const order =
+  const rawOrder =
     typeof orderDocument.toObject === 'function'
       ? orderDocument.toObject({ virtuals: true })
       : { ...orderDocument };
-
+  const order = sanitizeOrderForViewer(rawOrder, viewerRole);
   const tracking = buildOrderTrackingPayload(order);
+  const financials = {
+    totalPrice: roundMoney(order?.totalPrice),
+    deliveryFee: roundMoney(order?.deliveryFee),
+    donationAmount: roundMoney(order?.donationAmount),
+    currency: normalizeString(order?.currency, 'EUR'),
+  };
+  const role = String(viewerRole || '').trim().toLowerCase();
+
+  if (role === 'admin') {
+    financials.platformCommissionAmount = roundMoney(order?.platformCommissionAmount);
+    financials.restaurantEarning = roundMoney(order?.restaurantEarning);
+    financials.driverEarning = roundMoney(order?.driverEarning);
+    financials.platformDeliveryEarning = roundMoney(order?.platformDeliveryEarning);
+  } else if (role === 'restaurant') {
+    financials.platformCommissionAmount = roundMoney(order?.platformCommissionAmount);
+    financials.restaurantEarning = roundMoney(order?.restaurantEarning);
+  } else if (role === 'livreur') {
+    financials.driverEarning = roundMoney(order?.driverEarning);
+  }
 
   return {
     ...order,
@@ -332,19 +352,13 @@ const sanitizeOrderForResponse = (orderDocument) => {
     etaMinutes: tracking?.etaMinutes ?? null,
     estimatedDeliveryTime: tracking?.estimatedDeliveryTime || '',
     trackingEnabled: tracking?.trackingEnabled || false,
-    financials: {
-      totalPrice: roundMoney(order?.totalPrice),
-      deliveryFee: roundMoney(order?.deliveryFee),
-      donationAmount: roundMoney(order?.donationAmount),
-      driverEarning: roundMoney(order?.driverEarning),
-      currency: normalizeString(order?.currency, 'EUR'),
-    },
+    financials,
   };
 };
 
-const sanitizeOrdersForResponse = (orders = []) => {
+const sanitizeOrdersForResponse = (orders = [], viewerRole = '') => {
   const safeOrders = Array.isArray(orders) ? orders : [];
-  return safeOrders.map(sanitizeOrderForResponse).filter(Boolean);
+  return safeOrders.map((order) => sanitizeOrderForResponse(order, viewerRole)).filter(Boolean);
 };
 
 const canTransitionStatus = (currentStatus, nextStatus, role) => {
@@ -469,7 +483,7 @@ const getOrders = async (req, res) => {
     }
 
     const orders = await populateOrder(Order.find(filter).sort({ createdAt: -1 }));
-    const safeOrders = sanitizeOrdersForResponse(orders);
+    const safeOrders = sanitizeOrdersForResponse(orders, req.user?.role);
 
     return res.status(200).json({
       success: true,
@@ -501,7 +515,7 @@ const getOrdersByUser = async (req, res) => {
       Order.find({ user: userId }).sort({ createdAt: -1 })
     );
 
-    const safeOrders = sanitizeOrdersForResponse(orders);
+    const safeOrders = sanitizeOrdersForResponse(orders, req.user?.role);
 
     return res.status(200).json({
       success: true,
@@ -555,7 +569,7 @@ const getOrdersByRestaurant = async (req, res) => {
       Order.find({ restaurant: restaurantId }).sort({ createdAt: -1 })
     );
 
-    const safeOrders = sanitizeOrdersForResponse(orders);
+    const safeOrders = sanitizeOrdersForResponse(orders, req.user?.role);
 
     return res.status(200).json({
       success: true,
@@ -575,7 +589,7 @@ const getOrdersByRestaurant = async (req, res) => {
 const getOrderById = async (req, res) => {
   try {
     const order = await populateOrder(Order.findById(req.order._id));
-    const safeOrder = sanitizeOrderForResponse(order);
+    const safeOrder = sanitizeOrderForResponse(order, req.user?.role);
 
     return res.status(200).json({
       success: true,
@@ -613,7 +627,7 @@ const createOrder = async (req, res) => {
       success: true,
       duplicate: true,
       message: 'Cette commande avait déjà été enregistrée.',
-      order: sanitizeOrderForResponse(populatedOrder),
+      order: sanitizeOrderForResponse(populatedOrder, req.user?.role),
     });
     return true;
   };
@@ -888,7 +902,7 @@ const createOrder = async (req, res) => {
     }
 
     const populatedOrder = await populateOrder(Order.findById(savedOrder._id));
-    const safeOrder = sanitizeOrderForResponse(populatedOrder);
+    const safeOrder = sanitizeOrderForResponse(populatedOrder, req.user?.role);
 
     return res.status(201).json({
       success: true,
@@ -1010,7 +1024,7 @@ const updateOrderStatus = async (req, res) => {
     }).catch(() => {});
 
     const updatedOrder = await populateOrder(Order.findById(order._id));
-    const safeOrder = sanitizeOrderForResponse(updatedOrder);
+    const safeOrder = sanitizeOrderForResponse(updatedOrder, req.user?.role);
 
     return res.status(200).json({
       success: true,
@@ -1093,7 +1107,7 @@ const assignDriverToOrder = async (req, res) => {
     }).catch(() => {});
 
     const updatedOrder = await populateOrder(Order.findById(order._id));
-    const safeOrder = sanitizeOrderForResponse(updatedOrder);
+    const safeOrder = sanitizeOrderForResponse(updatedOrder, req.user?.role);
 
     return res.status(200).json({
       success: true,
@@ -1113,7 +1127,7 @@ const assignDriverToOrder = async (req, res) => {
 const getOrderTracking = async (req, res) => {
   try {
     const order = await populateOrder(Order.findById(req.order._id));
-    const safeOrder = sanitizeOrderForResponse(order);
+    const safeOrder = sanitizeOrderForResponse(order, req.user?.role);
 
     return res.status(200).json({
       success: true,
@@ -1189,7 +1203,7 @@ const updateDriverLocation = async (req, res) => {
     await order.save();
 
     const updatedOrder = await populateOrder(Order.findById(order._id));
-    const safeOrder = sanitizeOrderForResponse(updatedOrder);
+    const safeOrder = sanitizeOrderForResponse(updatedOrder, req.user?.role);
 
     return res.status(200).json({
       success: true,
