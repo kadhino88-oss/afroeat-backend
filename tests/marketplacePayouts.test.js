@@ -7,6 +7,7 @@ const {
   isPartnerReadyForTransfers,
   toStripeAmount,
   isPartialRefundCharge,
+  isConnectPayoutsEnabled,
 } = require('../utils/marketplacePayouts');
 
 const envKeys = [
@@ -80,4 +81,19 @@ test('classifies partial refunds even before any transfer exists', () => {
   assert.equal(isPartialRefundCharge({ amount: 10000, amount_refunded: 0 }), false);
   assert.equal(isPartialRefundCharge({ amount: 0, amount_refunded: 0 }), false);
   assert.equal(isPartialRefundCharge({ amount: 10000, amount_refunded: NaN }), false);
+});
+
+test('Connect payouts remain disabled unless explicitly enabled', () => {
+  const previous = process.env.STRIPE_CONNECT_PAYOUTS_ENABLED;
+  delete process.env.STRIPE_CONNECT_PAYOUTS_ENABLED;
+  try {
+    assert.equal(isConnectPayoutsEnabled(), false);
+    process.env.STRIPE_CONNECT_PAYOUTS_ENABLED = 'false';
+    assert.equal(isConnectPayoutsEnabled(), false);
+    process.env.STRIPE_CONNECT_PAYOUTS_ENABLED = 'true';
+    assert.equal(isConnectPayoutsEnabled(), true);
+  } finally {
+    if (previous === undefined) delete process.env.STRIPE_CONNECT_PAYOUTS_ENABLED;
+    else process.env.STRIPE_CONNECT_PAYOUTS_ENABLED = previous;
+  }
 });
