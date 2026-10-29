@@ -1,9 +1,21 @@
 const mongoose = require('mongoose');
+const {
+  normalizeIdempotencyKey,
+  createOrderRequestFingerprint,
+} = require('../utils/orderIdempotency');
 
 const Order = require('../models/Order');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
+const MenuItem = require('../models/MenuItem');
+const {
+  normalizeRequestedOrderItems,
+  buildTrustedOrderItems,
+  calculateRestaurantPricing,
+} = require('../utils/orderPricing');
+
 const { sendPushToUser } = require('../utils/pushNotifications');
+const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -15,8 +27,6 @@ const allowedStatuses = [
   'Livrée',
   'Annulée',
 ];
-
-const allowedPaymentStatuses = ['Non payé', 'Payé', 'Remboursé'];
 
 const DELIVERY_FLOW_STATUSES = [
   'Confirmée',
@@ -578,30 +588,49 @@ const getOrderById = async (req, res) => {
 };
 
 const createOrder = async (req, res) => {
+  let orderUser = null;
+  let idempotencyKey = null;
+  let requestFingerprint = null;
+
+  const respondWithExistingOrder = async (existingOrder) => {
+    if (!existingOrder) return false;
+
+    if (!requestFingerprint || existingOrder.requestFingerprint !== requestFingerprint) {
+      res.status(409).json({
+        success: false,
+        code: 'IDEMPOTENCY_KEY_REUSED',
+        message: 'Cette clé a déjà été utilisée pour une autre commande. Relance avec une nouvelle clé.',
+      });
+      return true;
+    }
+
+    const populatedOrder = await populateOrder(Order.findById(existingOrder._id));
+    res.status(200).json({
+      success: true,
+      duplicate: true,
+      message: 'Cette commande avait déjà été enregistrée.',
+      order: sanitizeOrderForResponse(populatedOrder),
+    });
+    return true;
+  };
+
   try {
     const {
       user,
       restaurant,
       items,
-      totalPrice,
       deliveryAddress,
-      status,
-      paymentStatus,
-      deliveryPerson,
       notes,
-      currency,
       customerLocation,
-      restaurantLocation,
-      deliveryFee,
-      driverEarning,
       donationAmount,
-    } = req.body;
+    } = req.body || {};
 
-    const orderUser = req.user.role === 'client' ? req.user._id : user;
+    orderUser = req.user.role === 'client' ? req.user._id : user;
 
     if (!orderUser || !restaurant || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
+        code: 'INVALID_ORDER_REQUEST',
         message: 'Les champs user, restaurant et items sont obligatoires.',
       });
     }
@@ -609,6 +638,7 @@ const createOrder = async (req, res) => {
     if (!isValidObjectId(orderUser)) {
       return res.status(400).json({
         success: false,
+        code: 'INVALID_USER_ID',
         message: 'ID utilisateur invalide.',
       });
     }
@@ -616,175 +646,184 @@ const createOrder = async (req, res) => {
     if (!isValidObjectId(restaurant)) {
       return res.status(400).json({
         success: false,
+        code: 'INVALID_RESTAURANT_ID',
         message: 'ID restaurant invalide.',
       });
     }
 
-    if (deliveryPerson && !isValidObjectId(deliveryPerson)) {
-      return res.status(400).json({
-        success: false,
-        message: 'ID livreur invalide.',
-      });
-    }
-
-    if (status && !allowedStatuses.includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Statut invalide.',
-      });
-    }
-
-    if (paymentStatus && !allowedPaymentStatuses.includes(paymentStatus)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Statut de paiement invalide.',
-      });
-    }
-
     const safeDeliveryAddress = normalizeDeliveryAddress(deliveryAddress);
-
     if (!safeDeliveryAddress) {
       return res.status(400).json({
         success: false,
+        code: 'DELIVERY_ADDRESS_REQUIRED',
         message: 'Le champ deliveryAddress est obligatoire.',
       });
     }
 
+    const keyResult = normalizeIdempotencyKey(
+      req.get?.('Idempotency-Key') || req.body?.idempotencyKey
+    );
+    if (!keyResult.ok) {
+      return res.status(400).json({
+        success: false,
+        code: keyResult.code,
+        message: keyResult.message,
+      });
+    }
+    idempotencyKey = keyResult.key;
+
+    const requestedResult = normalizeRequestedOrderItems(items, isValidObjectId);
+    if (!requestedResult.ok) {
+      return res.status(400).json({
+        success: false,
+        code: requestedResult.code,
+        message: requestedResult.message,
+      });
+    }
+
+    const safeNotes = normalizeString(notes).slice(0, 500);
+    if (idempotencyKey) {
+      requestFingerprint = createOrderRequestFingerprint({
+        restaurant: String(restaurant),
+        items: requestedResult.items,
+        deliveryAddress: safeDeliveryAddress,
+        notes: safeNotes,
+      });
+
+      const previousOrder = await Order.findOne({ user: orderUser, idempotencyKey });
+      if (previousOrder) {
+        await respondWithExistingOrder(previousOrder);
+        return;
+      }
+    }
+
     const restaurantExists = await Restaurant.findById(restaurant).select(
-      '_id owner latitude longitude location address city country deliveryFee'
+      '_id owner latitude longitude location address city country currency deliveryFee minimumOrderAmount isActive isOpen'
     );
 
     if (!restaurantExists) {
       return res.status(404).json({
         success: false,
+        code: 'RESTAURANT_NOT_FOUND',
         message: 'Restaurant introuvable.',
       });
     }
 
-    const normalizedItems = normalizeItems(items);
-
-    const invalidItem = normalizedItems.find(
-      (item) =>
-        !item.menuItem ||
-        !isValidObjectId(item.menuItem) ||
-        !item.name ||
-        item.quantity <= 0 ||
-        !Number.isFinite(item.quantity) ||
-        item.price < 0 ||
-        !Number.isFinite(item.price)
-    );
-
-    if (invalidItem) {
-      return res.status(400).json({
+    if (restaurantExists.isActive === false) {
+      return res.status(409).json({
         success: false,
-        message: 'Un ou plusieurs articles du panier sont invalides.',
+        code: 'RESTAURANT_INACTIVE',
+        message: 'Ce restaurant ne prend pas de commandes pour le moment.',
       });
     }
 
-    const itemsSubtotal = roundMoney(
-      normalizedItems.reduce((sum, item) => {
-        return sum + roundMoney(item.price) * normalizeNumber(item.quantity, 0);
-      }, 0)
-    );
-
-    const safeDeliveryFee = roundMoney(
-      deliveryFee ?? restaurantExists?.deliveryFee ?? 0
-    );
-
-    // Don "Afro Impact" optionnel choisi par le client au checkout -
-    // jamais deduit automatiquement, borne pour eviter une saisie absurde.
-    const safeDonationAmount = roundMoney(
-      Math.min(Math.max(normalizeNumber(donationAmount, 0), 0), 100)
-    );
-
-    const expectedTotal = roundMoney(
-      itemsSubtotal + safeDeliveryFee + safeDonationAmount
-    );
-    const providedTotal =
-      totalPrice !== undefined && totalPrice !== null
-        ? roundMoney(totalPrice)
-        : null;
-
-    if (
-      providedTotal !== null &&
-      Math.abs(providedTotal - expectedTotal) > 0.01
-    ) {
-      return res.status(400).json({
+    if (restaurantExists.isOpen === false) {
+      return res.status(409).json({
         success: false,
-        message:
-          'Le total de la commande est incohérent avec le sous-total, les frais de livraison et le don éventuel.',
-        details: {
-          itemsSubtotal,
-          deliveryFee: safeDeliveryFee,
-          donationAmount: safeDonationAmount,
-          expectedTotal,
-          providedTotal,
-        },
+        code: 'RESTAURANT_CLOSED',
+        message: 'Ce restaurant est actuellement fermé.',
       });
     }
 
-    let assignedDriverId = null;
+    // This repository snapshot is not cleared for marketplace production:
+    // no verified payout corridor or cash-collection ledger is enabled.
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({
+        success: false,
+        code: 'MARKETPLACE_COMMERCE_NOT_READY',
+        message: 'La prise de commandes sera activée après validation des paiements marketplace et des versements partenaires.',
+      });
+    }
 
-    if (deliveryPerson) {
-      const courier = await User.findById(deliveryPerson).select(
-        '_id role accountStatus'
-      );
+    const requestedDonation =
+      donationAmount === undefined || donationAmount === null ? 0 : Number(donationAmount);
 
-      if (!courier || normalizeLowerString(courier.role) !== 'livreur') {
-        return res.status(400).json({
-          success: false,
-          message: 'Le livreur sélectionné est invalide.',
-        });
-      }
+    if (!Number.isFinite(requestedDonation) || requestedDonation < 0 || requestedDonation > 100) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_DONATION_AMOUNT',
+        message: 'Le montant du don est invalide.',
+      });
+    }
 
-      if (normalizeLowerString(courier.accountStatus) !== 'active') {
-        return res.status(403).json({
-          success: false,
-          message: 'Ce livreur ne peut pas recevoir de commandes.',
-        });
-      }
+    // Donations stay unavailable until a beneficiary, accounting and settlement
+    // flow is configured and publicly disclosed.
+    if (requestedDonation > 0) {
+      return res.status(409).json({
+        success: false,
+        code: 'DONATIONS_NOT_CONFIGURED',
+        message: 'Les dons Afroeat Impact sont temporairement indisponibles.',
+      });
+    }
 
-      assignedDriverId = courier._id;
+    const menuItems = await MenuItem.find({
+      _id: { $in: requestedResult.menuItemIds },
+      restaurant: restaurantExists._id,
+      available: { $ne: false },
+    })
+      .select('_id restaurant name price image available')
+      .lean();
+
+    const trustedItemsResult = buildTrustedOrderItems({
+      requestedItems: requestedResult.items,
+      menuItems,
+      restaurantId: restaurantExists._id,
+    });
+
+    if (!trustedItemsResult.ok) {
+      const statusCode = trustedItemsResult.code === 'MENU_ITEM_UNAVAILABLE' ? 409 : 400;
+      return res.status(statusCode).json({
+        success: false,
+        code: trustedItemsResult.code,
+        message: trustedItemsResult.message,
+      });
+    }
+
+    const pricing = calculateRestaurantPricing({
+      items: trustedItemsResult.items,
+      restaurant: restaurantExists,
+    });
+
+    if (!pricing.ok) {
+      return res.status(pricing.code === 'MINIMUM_ORDER_NOT_MET' ? 409 : 400).json({
+        success: false,
+        code: pricing.code,
+        message: pricing.message,
+        ...(pricing.subtotal !== undefined ? { subtotal: pricing.subtotal } : {}),
+        ...(pricing.minimumOrderAmount !== undefined
+          ? { minimumOrderAmount: pricing.minimumOrderAmount }
+          : {}),
+        ...(pricing.currency ? { currency: pricing.currency } : {}),
+      });
     }
 
     const safeCustomerLocation = normalizeCoordinates(customerLocation);
+    const safeRestaurantLocation = normalizeCoordinates({
+      lat: restaurantExists?.location?.latitude ?? restaurantExists?.latitude,
+      lng: restaurantExists?.location?.longitude ?? restaurantExists?.longitude,
+    });
 
-    const safeRestaurantLocation =
-      normalizeCoordinates(restaurantLocation) ||
-      normalizeCoordinates({
-        lat: restaurantExists?.location?.latitude ?? restaurantExists?.latitude,
-        lng: restaurantExists?.location?.longitude ?? restaurantExists?.longitude,
-      });
-
-    const safeDriverEarning = roundMoney(
-      driverEarning ?? safeDeliveryFee
-    );
-
-    if (safeDriverEarning < 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Le gain livreur est invalide.',
-      });
-    }
-
-    const initialStatus = status || 'En attente';
-
+    // Client-supplied status, payment state, currency, item prices, delivery
+    // fees and courier earnings are deliberately ignored.
+    const initialStatus = 'En attente';
     const newOrder = new Order({
       user: orderUser,
-      restaurant,
-      items: normalizedItems,
-      totalPrice: expectedTotal,
-      currency: normalizeString(currency || 'EUR') || 'EUR',
+      restaurant: restaurantExists._id,
+      items: trustedItemsResult.items,
+      totalPrice: pricing.totalPrice,
+      currency: pricing.currency,
       deliveryAddress: safeDeliveryAddress,
       status: initialStatus,
-      paymentStatus: paymentStatus || 'Non payé',
-      deliveryPerson: assignedDriverId,
-      notes: normalizeString(notes),
+      paymentStatus: 'Non payé',
+      paymentMethod: null,
+      deliveryPerson: null,
+      notes: safeNotes,
       customerLocation: safeCustomerLocation,
       restaurantLocation: safeRestaurantLocation,
-      deliveryFee: safeDeliveryFee,
-      donationAmount: safeDonationAmount,
-      driverEarning: safeDriverEarning,
+      deliveryFee: pricing.deliveryFee,
+      donationAmount: 0,
+      driverEarning: pricing.driverEarning,
+      ...(idempotencyKey ? { idempotencyKey, requestFingerprint } : {}),
       statusHistory: [
         {
           status: initialStatus,
@@ -796,13 +835,28 @@ const createOrder = async (req, res) => {
       ],
     });
 
-    const savedOrder = await newOrder.save();
+    let savedOrder;
+    try {
+      savedOrder = await newOrder.save();
+    } catch (error) {
+      // Concurrent retries can pass the first lookup together; the compound
+      // unique index makes only one insert win and the loser returns that order.
+      if (idempotencyKey && error?.code === 11000) {
+        const existingOrder = await Order.findOne({ user: orderUser, idempotencyKey });
+        if (existingOrder) {
+          await respondWithExistingOrder(existingOrder);
+          return;
+        }
+      }
+      throw error;
+    }
+
     const populatedOrder = await populateOrder(Order.findById(savedOrder._id));
     const safeOrder = sanitizeOrderForResponse(populatedOrder);
 
     return res.status(201).json({
       success: true,
-      message: 'Commande créée avec succès.',
+      message: 'Commande créée avec les prix et disponibilités confirmés par le serveur.',
       order: safeOrder,
     });
   } catch (error) {
@@ -816,7 +870,8 @@ const createOrder = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: error.message || 'Erreur serveur.',
+      code: 'ORDER_CREATION_FAILED',
+      message: 'Impossible de créer la commande. Réessaie plus tard.',
     });
   }
 };
@@ -849,7 +904,26 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
+    const deliveryPayment = evaluateDeliveryPayment({
+      nextStatus,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+    });
+
+    if (!deliveryPayment.allowed) {
+      return res.status(409).json({
+        success: false,
+        code: deliveryPayment.code,
+        message: deliveryPayment.message,
+      });
+    }
+
     order.status = nextStatus;
+
+    if (deliveryPayment.cashPaymentCollected) {
+      order.paymentStatus = 'Payé';
+      order.paidAt = new Date();
+    }
 
     if (nextStatus === 'En livraison') {
       if (!order.deliveryStartedAt) {
@@ -873,7 +947,9 @@ const updateOrderStatus = async (req, res) => {
       status: nextStatus,
       updatedBy: req.user?._id || null,
       updatedByRole: req.user?.role || '',
-      note,
+      note: deliveryPayment.cashPaymentCollected
+        ? normalizeString(note, 'Paiement à la livraison perçu')
+        : note,
     });
 
     await order.save();

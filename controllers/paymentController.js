@@ -1,7 +1,15 @@
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? require('stripe')(process.env.STRIPE_SECRET_KEY)
+  : null;
 const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const User = require('../models/User');
+const {
+  isMatchingPaymentIntent,
+  isMatchingCheckoutSession,
+} = require('../utils/paymentValidation');
+const { isFullyRefundedCharge } = require('../utils/refundGuards');
+const { evaluatePaymentChannel } = require('../utils/paymentChannel');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -21,36 +29,84 @@ const CURRENCY_CONFIG = {
   EUR: { multiplier: 100, minAmount: 0.5 },
   USD: { multiplier: 100, minAmount: 0.5 },
   GBP: { multiplier: 100, minAmount: 0.3 },
+  CHF: { multiplier: 100, minAmount: 0.5 },
   CAD: { multiplier: 100, minAmount: 0.5 },
   XOF: { multiplier: 1, minAmount: 100 },
   XAF: { multiplier: 1, minAmount: 100 },
 };
 
 const toStripeAmount = (amount, currency) => {
-  const config = CURRENCY_CONFIG[String(currency).toUpperCase()] || CURRENCY_CONFIG.EUR;
-  return Math.round(amount * config.multiplier);
+  const config = CURRENCY_CONFIG[String(currency).toUpperCase()];
+  return config ? Math.round(amount * config.multiplier) : null;
 };
 
 const getMinAmount = (currency) => {
-  const config = CURRENCY_CONFIG[String(currency).toUpperCase()] || CURRENCY_CONFIG.EUR;
-  return config.minAmount;
+  const config = CURRENCY_CONFIG[String(currency).toUpperCase()];
+  return config ? config.minAmount : null;
 };
+
+const hasStripeTestSecret = () =>
+  /^(sk|rk)_test_/.test(String(process.env.STRIPE_SECRET_KEY || ''));
+
+const canCreateDevelopmentCardPayment = () =>
+  process.env.NODE_ENV !== 'production' && Boolean(stripe) && hasStripeTestSecret();
+
+const stripeUnavailable = (res) =>
+  res.status(503).json({
+    success: false,
+    code: 'STRIPE_NOT_CONFIGURED',
+    message: 'Les paiements par carte sont temporairement indisponibles.',
+  });
+
+const stripeTestKeyRequired = (res) =>
+  res.status(503).json({
+    success: false,
+    code: 'STRIPE_TEST_KEY_REQUIRED',
+    message: 'Une clé Stripe de test est requise pour les paiements en environnement de développement.',
+  });
 
 const getOrderAmount = (order) => {
   return roundMoney(order?.totalPrice || 0);
 };
 
-const markOrderAsPaid = async ({ orderId, paymentIntentId = '', checkoutSessionId = '' }) => {
+const markOrderAsPaid = async ({
+  orderId,
+  paymentIntent = null,
+  checkoutSession = null,
+}) => {
   if (!orderId || !isValidObjectId(orderId)) return null;
 
   const order = await Order.findById(orderId);
   if (!order) return null;
 
+  // Only mark paid when a successful Stripe object matches the order's
+  // stored ID, owner, amount, currency and metadata. Never let a stale
+  // webhook reopen a fully refunded order.
+  const validIntent = isMatchingPaymentIntent({
+    order,
+    paymentIntent,
+    toStripeAmount,
+  });
+  const validSession = isMatchingCheckoutSession({
+    order,
+    checkoutSession,
+    toStripeAmount,
+  });
+
+  if (!validIntent && !validSession) return null;
+  if (order.paymentStatus === 'Remboursé') return null;
+  if (order.paymentStatus === 'Payé') return order;
+
   order.paymentStatus = 'Payé';
   order.paidAt = new Date();
 
-  if (paymentIntentId) order.stripePaymentIntentId = paymentIntentId;
-  if (checkoutSessionId) order.stripeCheckoutSessionId = checkoutSessionId;
+  if (validIntent) order.paymentMethod = 'card';
+  if (validSession) {
+    order.paymentMethod = 'stripe_checkout';
+    if (typeof checkoutSession.payment_intent === 'string') {
+      order.stripePaymentIntentId = checkoutSession.payment_intent;
+    }
+  }
 
   if (order.status === 'En attente') {
     order.status = 'Confirmée';
@@ -108,6 +164,8 @@ const ensureStripeCustomer = async (order) => {
 
 const createPaymentIntent = async (req, res) => {
   try {
+    if (!stripe) return stripeUnavailable(res);
+
     const { orderId } = req.body;
 
     if (!orderId || !isValidObjectId(orderId)) {
@@ -126,14 +184,45 @@ const createPaymentIntent = async (req, res) => {
       });
     }
 
+    const channelDecision = evaluatePaymentChannel(order, 'card');
+    if (!channelDecision.allowed) {
+      return res.status(409).json({
+        success: false,
+        code: channelDecision.code,
+        message: channelDecision.message,
+      });
+    }
+
+    // This repository snapshot does not implement Stripe Connect onboarding,
+    // approved split rates or payout reconciliation. Fail closed in production
+    // until those marketplace controls are implemented and tested.
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({
+        success: false,
+        code: 'MARKETPLACE_PAYMENTS_NOT_READY',
+        message: 'Les paiements marketplace attendent la configuration et la validation des versements AFROEAT.',
+      });
+    }
+
+    if (!canCreateDevelopmentCardPayment()) return stripeTestKeyRequired(res);
+
     const currency = normalizeString(order.currency, 'EUR').toUpperCase();
     const amount = getOrderAmount(order);
     const minAmount = getMinAmount(currency);
 
-    if (amount < minAmount) {
+    if (minAmount === null) {
       return res.status(400).json({
         success: false,
-        message: `Le montant minimum pour ${currency} est ${minAmount}.`,
+        code: 'UNSUPPORTED_CURRENCY',
+        message: `La devise ${currency} n’est pas prise en charge pour les paiements en ligne.`,
+      });
+    }
+
+    if (amount < minAmount || !Number.isSafeInteger(toStripeAmount(amount, currency))) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_PAYMENT_AMOUNT',
+        message: `Le montant de la commande n’est pas valide pour ${currency}.`,
       });
     }
 
@@ -181,13 +270,16 @@ const createPaymentIntent = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: error?.message || 'Erreur lors de la création du paiement.',
+      code: 'PAYMENT_INTENT_CREATION_FAILED',
+      message: 'Impossible de préparer le paiement. Réessaie plus tard.',
     });
   }
 };
 
 const createCheckoutSession = async (req, res) => {
   try {
+    if (!stripe) return stripeUnavailable(res);
+
     const { orderId } = req.body;
 
     if (!orderId || !isValidObjectId(orderId)) {
@@ -206,14 +298,42 @@ const createCheckoutSession = async (req, res) => {
       });
     }
 
+    const channelDecision = evaluatePaymentChannel(order, 'stripe_checkout');
+    if (!channelDecision.allowed) {
+      return res.status(409).json({
+        success: false,
+        code: channelDecision.code,
+        message: channelDecision.message,
+      });
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({
+        success: false,
+        code: 'MARKETPLACE_PAYMENTS_NOT_READY',
+        message: 'Les paiements marketplace attendent la configuration et la validation des versements AFROEAT.',
+      });
+    }
+
+    if (!canCreateDevelopmentCardPayment()) return stripeUnavailable(res);
+
     const currency = normalizeString(order.currency, 'EUR').toUpperCase();
     const amount = getOrderAmount(order);
     const minAmount = getMinAmount(currency);
 
-    if (amount < minAmount) {
+    if (minAmount === null) {
       return res.status(400).json({
         success: false,
-        message: `Le montant minimum pour ${currency} est ${minAmount}.`,
+        code: 'UNSUPPORTED_CURRENCY',
+        message: `La devise ${currency} n’est pas prise en charge pour les paiements en ligne.`,
+      });
+    }
+
+    if (amount < minAmount || !Number.isSafeInteger(toStripeAmount(amount, currency))) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_PAYMENT_AMOUNT',
+        message: `Le montant de la commande n’est pas valide pour ${currency}.`,
       });
     }
 
@@ -288,13 +408,16 @@ const createCheckoutSession = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: error?.message || 'Erreur création session Stripe Checkout.',
+      code: 'CHECKOUT_SESSION_CREATION_FAILED',
+      message: 'Impossible de préparer le paiement. Réessaie plus tard.',
     });
   }
 };
 
 const confirmPayment = async (req, res) => {
   try {
+    if (!stripe) return stripeUnavailable(res);
+
     const { orderId, paymentIntentId, checkoutSessionId } = req.body;
 
     if (!orderId || !isValidObjectId(orderId)) {
@@ -332,18 +455,21 @@ const confirmPayment = async (req, res) => {
         });
       }
 
-      const paidOrder = await markOrderAsPaid({
-        orderId,
-        checkoutSessionId: session.id,
-        paymentIntentId:
-          typeof session.payment_intent === 'string' ? session.payment_intent : '',
-      });
+      const paidOrder = await markOrderAsPaid({ orderId, checkoutSession: session });
+
+      if (!paidOrder) {
+        return res.status(409).json({
+          success: false,
+          code: 'PAYMENT_VALIDATION_FAILED',
+          message: 'Le paiement ne correspond pas à cette commande. Contacte le support si le débit a bien été effectué.',
+        });
+      }
 
       return res.status(200).json({
         success: true,
         message: 'Paiement confirmé.',
-        orderId: paidOrder?._id,
-        paymentStatus: paidOrder?.paymentStatus,
+        orderId: paidOrder._id,
+        paymentStatus: paidOrder.paymentStatus,
       });
     }
 
@@ -357,16 +483,21 @@ const confirmPayment = async (req, res) => {
         });
       }
 
-      const paidOrder = await markOrderAsPaid({
-        orderId,
-        paymentIntentId,
-      });
+      const paidOrder = await markOrderAsPaid({ orderId, paymentIntent });
+
+      if (!paidOrder) {
+        return res.status(409).json({
+          success: false,
+          code: 'PAYMENT_VALIDATION_FAILED',
+          message: 'Le paiement ne correspond pas à cette commande. Contacte le support si le débit a bien été effectué.',
+        });
+      }
 
       return res.status(200).json({
         success: true,
         message: 'Paiement confirmé.',
-        orderId: paidOrder?._id,
-        paymentStatus: paidOrder?.paymentStatus,
+        orderId: paidOrder._id,
+        paymentStatus: paidOrder.paymentStatus,
       });
     }
 
@@ -383,7 +514,8 @@ const confirmPayment = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: error?.message || 'Erreur confirmation paiement.',
+      code: 'PAYMENT_CONFIRMATION_FAILED',
+      message: 'Impossible de confirmer le paiement. Réessaie plus tard.',
     });
   }
 };
@@ -408,7 +540,8 @@ const handleWebhook = async (req, res) => {
 
     return res.status(400).json({
       success: false,
-      message: `Webhook Error: ${error.message}`,
+      code: 'INVALID_WEBHOOK_SIGNATURE',
+      message: 'Signature webhook Stripe invalide.',
     });
   }
 
@@ -419,16 +552,13 @@ const handleWebhook = async (req, res) => {
         const orderId = session.metadata?.orderId || session.client_reference_id;
 
         if (orderId && isValidObjectId(orderId) && session.payment_status === 'paid') {
-          await markOrderAsPaid({
-            orderId,
-            checkoutSessionId: session.id,
-            paymentIntentId:
-              typeof session.payment_intent === 'string'
-                ? session.payment_intent
-                : '',
-          });
+          const paidOrder = await markOrderAsPaid({ orderId, checkoutSession: session });
 
-          console.log(`✅ Checkout payé webhook: commande ${orderId}`);
+          if (paidOrder) {
+            console.log(`Checkout payé webhook : commande ${orderId}`);
+          } else {
+            console.error(`Webhook Checkout ignoré : validation commande impossible (${orderId}, ${session.id}).`);
+          }
         }
 
         break;
@@ -439,12 +569,13 @@ const handleWebhook = async (req, res) => {
         const orderId = paymentIntent.metadata?.orderId;
 
         if (orderId && isValidObjectId(orderId)) {
-          await markOrderAsPaid({
-            orderId,
-            paymentIntentId: paymentIntent.id,
-          });
+          const paidOrder = await markOrderAsPaid({ orderId, paymentIntent });
 
-          console.log(`✅ PaymentIntent payé webhook: commande ${orderId}`);
+          if (paidOrder) {
+            console.log(`PaymentIntent payé webhook : commande ${orderId}`);
+          } else {
+            console.error(`Webhook PaymentIntent ignoré : validation commande impossible (${orderId}, ${paymentIntent.id}).`);
+          }
         }
 
         break;
@@ -455,11 +586,18 @@ const handleWebhook = async (req, res) => {
         const orderId = paymentIntent.metadata?.orderId;
 
         if (orderId && isValidObjectId(orderId)) {
-          await Order.findByIdAndUpdate(orderId, {
-            paymentStatus: 'Non payé',
-            lastPaymentError:
-              paymentIntent.last_payment_error?.message || 'Paiement échoué',
-          });
+          await Order.findOneAndUpdate(
+            {
+              _id: orderId,
+              stripePaymentIntentId: paymentIntent.id,
+              paymentStatus: { $nin: ['Payé', 'Remboursé'] },
+            },
+            {
+              paymentStatus: 'Non payé',
+              lastPaymentError:
+                paymentIntent.last_payment_error?.message || 'Paiement échoué',
+            }
+          );
 
           console.log(`❌ Paiement échoué webhook: commande ${orderId}`);
         }
@@ -472,10 +610,17 @@ const handleWebhook = async (req, res) => {
         const orderId = session.metadata?.orderId || session.client_reference_id;
 
         if (orderId && isValidObjectId(orderId)) {
-          await Order.findByIdAndUpdate(orderId, {
-            paymentStatus: 'Non payé',
-            lastPaymentError: 'Session Stripe Checkout expirée',
-          });
+          await Order.findOneAndUpdate(
+            {
+              _id: orderId,
+              stripeCheckoutSessionId: session.id,
+              paymentStatus: { $nin: ['Payé', 'Remboursé'] },
+            },
+            {
+              paymentStatus: 'Non payé',
+              lastPaymentError: 'Session Stripe Checkout expirée',
+            }
+          );
         }
 
         break;
@@ -491,11 +636,22 @@ const handleWebhook = async (req, res) => {
           });
 
           if (order) {
+            if (!isFullyRefundedCharge(charge)) {
+              // A partial refund needs explicit financial reconciliation; do not
+              // mislabel the entire order as refunded or reopen payout flows.
+              console.warn('Remboursement partiel à rapprocher manuellement :', {
+                orderId: String(order._id),
+                amount: charge.amount,
+                amountRefunded: charge.amount_refunded,
+              });
+              break;
+            }
+
             order.paymentStatus = 'Remboursé';
             order.refundedAt = new Date();
             await order.save();
 
-            console.log(`🔄 Remboursement webhook: commande ${order._id}`);
+            console.log(`Remboursement total webhook : commande ${order._id}`);
           }
         }
 
@@ -515,14 +671,96 @@ const handleWebhook = async (req, res) => {
         break;
     }
   } catch (error) {
-    console.error('WEBHOOK PROCESSING ERROR =>', error.message);
+    console.error('WEBHOOK PROCESSING ERROR =>', {
+      type: error?.type,
+      code: error?.code,
+      message: error?.message,
+    });
+    // Return 5xx for transient processing failures so Stripe can retry.
+    return res.status(500).json({
+      received: false,
+      code: 'WEBHOOK_PROCESSING_FAILED',
+    });
   }
 
   return res.status(200).json({ received: true });
 };
 
+const getAvailablePaymentMethods = (req, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  return res.status(200).json({
+    success: true,
+    methods: {
+      // Production remains fail-closed until Connect, approved splits and
+      // payout reconciliation are implemented and reviewed.
+      card: !isProduction && Boolean(stripe) && hasStripeTestSecret(),
+      // Cash remains unavailable in production until collection and
+      // settlement reconciliation are implemented.
+      cash: !isProduction,
+    },
+  });
+};
+
+const selectCashPayment = async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(503).json({
+      success: false,
+      code: 'CASH_ON_DELIVERY_DISABLED',
+      message: 'Le paiement à la livraison est désactivé en production tant que le registre de collecte et de règlement n’est pas disponible.',
+    });
+  }
+
+  try {
+    const { orderId } = req.body || {};
+    if (!orderId || !isValidObjectId(orderId)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_ORDER_ID',
+        message: 'ID commande invalide.',
+      });
+    }
+
+    const { order, errorStatus, errorMessage } = await getAuthorizedOrder(orderId, req);
+    if (!order) {
+      return res.status(errorStatus).json({ success: false, message: errorMessage });
+    }
+
+    if (order.paymentStatus === 'Remboursé' || order.stripePaymentIntentId || order.stripeCheckoutSessionId) {
+      return res.status(409).json({
+        success: false,
+        code: 'CASH_PAYMENT_NOT_AVAILABLE',
+        message: 'Le paiement en espèces ne peut pas être sélectionné pour cette commande.',
+      });
+    }
+
+    order.paymentMethod = 'cash';
+    order.lastPaymentError = '';
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus,
+    });
+  } catch (error) {
+    console.error('SELECT CASH PAYMENT ERROR =>', {
+      type: error?.type,
+      code: error?.code,
+      message: error?.message,
+    });
+    return res.status(500).json({
+      success: false,
+      code: 'CASH_PAYMENT_SELECTION_FAILED',
+      message: 'Impossible de sélectionner le paiement à la livraison. Réessaie plus tard.',
+    });
+  }
+};
+
 const refundPayment = async (req, res) => {
   try {
+    if (!stripe) return stripeUnavailable(res);
+
     if (req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -593,9 +831,11 @@ const refundPayment = async (req, res) => {
 };
 
 module.exports = {
+  getAvailablePaymentMethods,
   createPaymentIntent,
   createCheckoutSession,
   confirmPayment,
+  selectCashPayment,
   handleWebhook,
   refundPayment,
 };

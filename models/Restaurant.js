@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const allowedCurrencies = ['EUR', 'USD', 'GBP', 'XOF', 'XAF', 'CAD'];
+const allowedCurrencies = ['EUR', 'USD', 'GBP', 'CHF', 'XOF', 'XAF', 'CAD'];
 
 const normalizeString = (value) => String(value || '').trim();
 

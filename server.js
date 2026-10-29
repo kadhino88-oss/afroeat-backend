@@ -57,8 +57,15 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
-if (!process.env.JWT_SECRET || String(process.env.JWT_SECRET).trim().length < 32) {
-  console.error('❌ JWT_SECRET manquant ou trop faible');
+const JWT_SECRET = String(process.env.JWT_SECRET || '').trim();
+const isPlaceholderJwtSecret = /^(replace|change[-_ ]?me|placeholder|example)/i.test(
+  JWT_SECRET
+);
+
+if (!JWT_SECRET || JWT_SECRET.length < 32 || isPlaceholderJwtSecret) {
+  console.error(
+    '❌ JWT_SECRET manquant, trop faible ou encore défini sur une valeur de remplacement'
+  );
   process.exit(1);
 }
 
@@ -83,7 +90,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
 };
 
 /**
@@ -290,10 +297,11 @@ app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/delivery', require('./routes/deliveryRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 
-if (process.env.STRIPE_SECRET_KEY) {
-  const { router: paymentsRouter } = require('./routes/paymentRoutes');
-  app.use('/api/payments', paymentsRouter);
-}
+// Mount payment method discovery and cash selection even when Stripe is
+// not configured. Card/checkout/refund endpoints return 503 in that case.
+// The raw-body webhook remains mounted above only when Stripe is configured.
+const { router: paymentsRouter } = require('./routes/paymentRoutes');
+app.use('/api/payments', paymentsRouter);
 
 app.use('/api', (req, res) => {
   res.status(404).json({

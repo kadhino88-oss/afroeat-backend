@@ -7,12 +7,16 @@ const {
   createPaymentIntent,
   createCheckoutSession,
   confirmPayment,
+  selectCashPayment,
+  getAvailablePaymentMethods,
   handleWebhook,
   refundPayment,
 } = require('../controllers/paymentController');
 
 const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
+
+router.get('/methods', protect, allowRoles('client', 'admin'), getAvailablePaymentMethods);
 
 router.post(
   '/create-payment-intent',
@@ -33,6 +37,13 @@ router.post(
   protect,
   allowRoles('client', 'admin'),
   confirmPayment
+);
+
+router.post(
+  '/select-cash',
+  protect,
+  allowRoles('client', 'admin'),
+  selectCashPayment
 );
 
 router.post(
