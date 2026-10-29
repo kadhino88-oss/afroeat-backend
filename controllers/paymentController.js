@@ -8,6 +8,7 @@ const {
   isMatchingPaymentIntent,
   isMatchingCheckoutSession,
 } = require('../utils/paymentValidation');
+const { isFullyRefundedCharge } = require('../utils/refundGuards');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -606,11 +607,22 @@ const handleWebhook = async (req, res) => {
           });
 
           if (order) {
+            if (!isFullyRefundedCharge(charge)) {
+              // A partial refund needs explicit financial reconciliation; do not
+              // mislabel the entire order as refunded or reopen payout flows.
+              console.warn('Remboursement partiel à rapprocher manuellement :', {
+                orderId: String(order._id),
+                amount: charge.amount,
+                amountRefunded: charge.amount_refunded,
+              });
+              break;
+            }
+
             order.paymentStatus = 'Remboursé';
             order.refundedAt = new Date();
             await order.save();
 
-            console.log(`🔄 Remboursement webhook: commande ${order._id}`);
+            console.log(`Remboursement total webhook : commande ${order._id}`);
           }
         }
 
