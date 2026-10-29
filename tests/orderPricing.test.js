@@ -8,7 +8,7 @@ const {
   calculateRestaurantPricing,
 } = require('../utils/orderPricing');
 
-const validId = (value) => /^[a-f\\d]{24}$/i.test(String(value || ''));
+const validId = (value) => /^[a-f0-9]{24}$/i.test(String(value || ''));
 const restaurantId = '650000000000000000000001';
 const menuA = {
   _id: '650000000000000000000011',
