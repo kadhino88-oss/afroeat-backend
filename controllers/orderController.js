@@ -16,6 +16,9 @@ const {
 
 const { sendPushToUser } = require('../utils/pushNotifications');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
+const { getMarketplaceRates } = require('../config/marketplaceRates');
+const { calculateMarketplaceSplit } = require('../utils/marketplaceAccounting');
+const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -797,6 +800,13 @@ const createOrder = async (req, res) => {
       });
     }
 
+    const marketplaceRates = getMarketplaceRates(pricing.currency);
+    const marketplaceSplit = calculateMarketplaceSplit({
+      itemsSubtotal: pricing.subtotal,
+      deliveryFee: pricing.deliveryFee,
+      rates: marketplaceRates,
+    });
+
     const safeCustomerLocation = normalizeCoordinates(customerLocation);
     const safeRestaurantLocation = normalizeCoordinates({
       lat: restaurantExists?.location?.latitude ?? restaurantExists?.latitude,
@@ -822,7 +832,13 @@ const createOrder = async (req, res) => {
       restaurantLocation: safeRestaurantLocation,
       deliveryFee: pricing.deliveryFee,
       donationAmount: 0,
-      driverEarning: pricing.driverEarning,
+      driverEarning: marketplaceSplit.driverEarning,
+      marketplaceSplitCalculated: true,
+      commissionRateBps: marketplaceSplit.commissionRateBps,
+      courierPayoutRateBps: marketplaceSplit.courierPayoutRateBps,
+      platformCommissionAmount: marketplaceSplit.platformCommissionAmount,
+      restaurantEarning: marketplaceSplit.restaurantEarning,
+      platformDeliveryEarning: marketplaceSplit.platformDeliveryEarning,
       ...(idempotencyKey ? { idempotencyKey, requestFingerprint } : {}),
       statusHistory: [
         {
@@ -953,6 +969,15 @@ const updateOrderStatus = async (req, res) => {
     });
 
     await order.save();
+
+    if (nextStatus === 'Livrée') {
+      try {
+        await createDeliveredOrderTransfers(order._id);
+      } catch (payoutError) {
+        // Delivery remains saved; payout reconciliation is retried through admin endpoints.
+        console.error('AFROEAT PAYOUT RECONCILIATION ERROR =>', payoutError?.message);
+      }
+    }
 
     sendPushToUser(order.user, {
       title: 'Afroeat',
