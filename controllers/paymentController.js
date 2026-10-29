@@ -9,6 +9,12 @@ const {
   isMatchingCheckoutSession,
 } = require('../utils/paymentValidation');
 const { isFullyRefundedCharge } = require('../utils/refundGuards');
+const {
+  reverseOrderTransfers,
+  flagOrderDispute,
+  reconcileOrderPayout,
+} = require('../utils/marketplacePayouts');
+const { handleConnectedAccountUpdated } = require('./connectController');
 const { evaluatePaymentChannel } = require('../utils/paymentChannel');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -628,30 +634,36 @@ const handleWebhook = async (req, res) => {
 
       case 'charge.refunded': {
         const charge = event.data.object;
-        const paymentIntentId = charge.payment_intent;
+        const paymentIntentId = typeof charge.payment_intent === 'string'
+          ? charge.payment_intent
+          : charge.payment_intent?.id;
 
         if (paymentIntentId) {
-          const order = await Order.findOne({
-            stripePaymentIntentId: paymentIntentId,
-          });
-
+          const order = await Order.findOne({ stripePaymentIntentId: paymentIntentId });
           if (order) {
-            if (!isFullyRefundedCharge(charge)) {
-              // A partial refund needs explicit financial reconciliation; do not
-              // mislabel the entire order as refunded or reopen payout flows.
-              console.warn('Remboursement partiel à rapprocher manuellement :', {
-                orderId: String(order._id),
-                amount: charge.amount,
-                amountRefunded: charge.amount_refunded,
-              });
-              break;
-            }
+            const fullyRefunded = isFullyRefundedCharge(charge);
+            const refundCurrency = String(charge.currency || order.currency || 'EUR').toUpperCase();
+            const refundMultiplier = ['XOF', 'XAF'].includes(refundCurrency)
+              ? 1
+              : (CURRENCY_CONFIG[refundCurrency]?.multiplier || 100);
 
-            order.paymentStatus = 'Remboursé';
-            order.refundedAt = new Date();
+            order.stripeAmountRefunded = roundMoney(
+              Number(charge.amount_refunded || 0) / refundMultiplier
+            );
+            if (fullyRefunded) {
+              order.paymentStatus = 'Remboursé';
+              order.refundedAt = new Date();
+            } else {
+              order.lastPaymentError = 'Remboursement partiel Stripe reçu : rapprochement financier requis.';
+            }
             await order.save();
 
-            console.log(`Remboursement total webhook : commande ${order._id}`);
+            // Full refunds reverse existing Connect transfers idempotently.
+            // Partial refunds are flagged for review and cannot trigger payouts.
+            await reverseOrderTransfers(order, charge);
+            console.log(
+              `Remboursement ${fullyRefunded ? 'intégral' : 'partiel'} webhook : commande ${order._id}`
+            );
           }
         }
 
@@ -660,10 +672,45 @@ const handleWebhook = async (req, res) => {
 
       case 'charge.dispute.created': {
         const dispute = event.data.object;
-        console.warn('⚠️ Dispute Stripe créée:', {
-          disputeId: dispute.id,
-          reason: dispute.reason,
-        });
+        const paymentIntentId = typeof dispute.payment_intent === 'string'
+          ? dispute.payment_intent
+          : dispute.payment_intent?.id;
+        if (paymentIntentId) {
+          await flagOrderDispute(paymentIntentId, dispute.id);
+        }
+        console.warn('Litige Stripe créé :', { disputeId: dispute.id, reason: dispute.reason });
+        break;
+      }
+
+      case 'charge.dispute.closed': {
+        const dispute = event.data.object;
+        const paymentIntentId = typeof dispute.payment_intent === 'string'
+          ? dispute.payment_intent
+          : dispute.payment_intent?.id;
+
+        if (paymentIntentId) {
+          const order = await Order.findOne({ stripePaymentIntentId: paymentIntentId });
+          if (order) {
+            order.stripeDisputeClosedAt = new Date();
+            if (dispute.status === 'won') {
+              order.stripeDisputeId = null;
+              order.payoutStatus = order.payoutStatus === 'transferred' ? 'transferred' : 'pending';
+              order.payoutError = '';
+              await order.save();
+              await reconcileOrderPayout(order._id);
+            } else {
+              order.payoutStatus = 'reconciliation_required';
+              order.payoutError = 'Litige Stripe perdu : règlement à examiner manuellement.';
+              order.payoutUpdatedAt = new Date();
+              await order.save();
+            }
+          }
+        }
+        break;
+      }
+
+      case 'account.updated': {
+        await handleConnectedAccountUpdated(event.data.object);
         break;
       }
 
@@ -805,15 +852,44 @@ const refundPayment = async (req, res) => {
       reason: reason || 'requested_by_customer',
     });
 
-    order.paymentStatus = 'Remboursé';
-    order.refundedAt = new Date();
     order.stripeRefundId = refund.id;
+    if (refund.status === 'succeeded') {
+      order.paymentStatus = 'Remboursé';
+      order.refundedAt = new Date();
+    } else if (refund.status === 'failed' || refund.status === 'canceled') {
+      order.lastPaymentError = 'Stripe a refusé le remboursement : ' + String(refund.status);
+    }
     await order.save();
 
-    return res.status(200).json({
-      success: true,
-      message: 'Remboursement effectué avec succès.',
+    if (refund.status === 'succeeded') {
+      try {
+        const intent = await stripe.paymentIntents.retrieve(order.stripePaymentIntentId, {
+          expand: ['latest_charge'],
+        });
+        const latestCharge = intent.latest_charge;
+        const charge = typeof latestCharge === 'string'
+          ? await stripe.charges.retrieve(latestCharge)
+          : latestCharge;
+        if (charge) await reverseOrderTransfers(order, charge);
+      } catch (reversalError) {
+        // Signed webhook remains the durable retry path if this immediate lookup fails.
+        console.error('REFUND PAYOUT REVERSAL DEFERRED =>', {
+          orderId: String(order._id),
+          message: reversalError?.message,
+          code: reversalError?.code,
+        });
+      }
+    }
+
+    return res.status(refund.status === 'failed' || refund.status === 'canceled' ? 502 : 200).json({
+      success: refund.status !== 'failed' && refund.status !== 'canceled',
+      message: refund.status === 'succeeded'
+        ? 'Remboursement confirmé.'
+        : refund.status === 'pending'
+          ? 'Le remboursement est en cours de traitement par Stripe.'
+          : 'Stripe n’a pas pu terminer le remboursement.',
       refundId: refund.id,
+      refundStatus: refund.status,
       orderId: order._id,
     });
   } catch (error) {

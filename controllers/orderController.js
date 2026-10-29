@@ -16,6 +16,10 @@ const {
 
 const { sendPushToUser } = require('../utils/pushNotifications');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
+const { getMarketplaceRates } = require('../config/marketplaceRates');
+const { calculateMarketplaceSplit } = require('../utils/marketplaceAccounting');
+const { isConnectPayoutsEnabled } = require('../utils/marketplacePayouts');
+const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -797,6 +801,32 @@ const createOrder = async (req, res) => {
       });
     }
 
+    let marketplaceRates;
+    try {
+      marketplaceRates = getMarketplaceRates(pricing.currency);
+    } catch (configurationError) {
+      console.error('AFROEAT MARKETPLACE RATE CONFIG ERROR =>', configurationError?.message);
+      return res.status(503).json({
+        success: false,
+        code: 'MARKETPLACE_RATES_UNAVAILABLE',
+        message: 'Les taux de répartition des paiements ne sont pas configurés correctement.',
+      });
+    }
+
+    if (isConnectPayoutsEnabled() && !marketplaceRates) {
+      return res.status(503).json({
+        success: false,
+        code: 'MARKETPLACE_RATES_UNAVAILABLE',
+        message: 'Les taux de répartition ne sont pas configurés pour cette devise.',
+      });
+    }
+
+    const marketplaceSplit = calculateMarketplaceSplit({
+      itemsSubtotal: pricing.subtotal,
+      deliveryFee: pricing.deliveryFee,
+      rates: marketplaceRates,
+    });
+
     const safeCustomerLocation = normalizeCoordinates(customerLocation);
     const safeRestaurantLocation = normalizeCoordinates({
       lat: restaurantExists?.location?.latitude ?? restaurantExists?.latitude,
@@ -822,7 +852,13 @@ const createOrder = async (req, res) => {
       restaurantLocation: safeRestaurantLocation,
       deliveryFee: pricing.deliveryFee,
       donationAmount: 0,
-      driverEarning: pricing.driverEarning,
+      driverEarning: marketplaceSplit.driverEarning,
+      marketplaceSplitCalculated: true,
+      commissionRateBps: marketplaceSplit.commissionRateBps,
+      courierPayoutRateBps: marketplaceSplit.courierPayoutRateBps,
+      platformCommissionAmount: marketplaceSplit.platformCommissionAmount,
+      restaurantEarning: marketplaceSplit.restaurantEarning,
+      platformDeliveryEarning: marketplaceSplit.platformDeliveryEarning,
       ...(idempotencyKey ? { idempotencyKey, requestFingerprint } : {}),
       statusHistory: [
         {
@@ -953,6 +989,15 @@ const updateOrderStatus = async (req, res) => {
     });
 
     await order.save();
+
+    if (nextStatus === 'Livrée') {
+      try {
+        await createDeliveredOrderTransfers(order._id);
+      } catch (payoutError) {
+        // Delivery remains saved; payout reconciliation is retried through admin endpoints.
+        console.error('AFROEAT PAYOUT RECONCILIATION ERROR =>', payoutError?.message);
+      }
+    }
 
     sendPushToUser(order.user, {
       title: 'Afroeat',
