@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   audit:
@@ -28,28 +28,26 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Generate complete dependency audit report
+      - name: Generate complete baseline audit report
         shell: bash
-        run: npm audit --json > npm-audit-report.json || test -s npm-audit-report.json
+        run: npm audit --json > npm-audit-baseline.json || test -s npm-audit-baseline.json
 
-      - name: Generate production dependency audit report
+      - name: Generate production baseline audit report
         shell: bash
-        run: npm audit --omit=dev --json > npm-audit-production-report.json || test -s npm-audit-production-report.json
+        run: npm audit --omit=dev --json > npm-audit-production-baseline.json || test -s npm-audit-production-baseline.json
 
-      - name: Summarize dependency vulnerability reports
+      - name: Summarize baseline vulnerabilities
         shell: bash
         run: |
           node <<'NODE'
           const fs = require('node:fs');
-
-          for (const file of ['npm-audit-report.json', 'npm-audit-production-report.json']) {
+          for (const file of ['npm-audit-baseline.json', 'npm-audit-production-baseline.json']) {
             const audit = JSON.parse(fs.readFileSync(file, 'utf8'));
             const counts = audit.metadata?.vulnerabilities;
             if (!counts) {
               console.error(`npm audit did not return a vulnerability summary for ${file}:`, audit.error || 'unknown error');
               process.exit(1);
             }
-
             console.log(`Dependency audit scope: ${file}`);
             console.log('npm audit severity counts:', JSON.stringify(counts));
             for (const [name, advisory] of Object.entries(audit.vulnerabilities || {})) {
@@ -64,21 +62,92 @@ jobs:
                 `::warning title=${advisory.severity.toUpperCase()} dependency ${name}::scope=${file}; severity=${advisory.severity}; direct=${advisory.isDirect}; range=${advisory.range}; fix=${fixLabel}; advisories=${via.join('; ')}`
               );
             }
+          }
+          NODE
 
-            if ((counts.critical || 0) > 0) {
-              console.log(`::warning::Critical npm vulnerabilities exist in ${file} and must be remediated before release.`);
+      - name: Generate non-forced lockfile fix candidate
+        shell: bash
+        run: |
+          if npm audit fix --package-lock-only --ignore-scripts; then
+            echo "npm audit fix generated a candidate lockfile without forcing major-version changes."
+          else
+            echo "::warning::npm audit fix could not resolve every finding automatically; the candidate must be reviewed."
+          fi
+
+      - name: Install candidate lockfile
+        run: npm ci
+
+      - name: Validate candidate lockfile
+        run: |
+          npm run check:syntax
+          npm test
+          npm ls --depth=0
+
+      - name: Audit candidate dependency tree
+        shell: bash
+        run: npm audit --json > npm-audit-candidate.json || test -s npm-audit-candidate.json
+
+      - name: Audit candidate production dependency tree
+        shell: bash
+        run: npm audit --omit=dev --json > npm-audit-production-candidate.json || test -s npm-audit-production-candidate.json
+
+      - name: Summarize candidate vulnerabilities
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          for (const file of ['npm-audit-candidate.json', 'npm-audit-production-candidate.json']) {
+            const audit = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const counts = audit.metadata?.vulnerabilities;
+            if (!counts) {
+              console.error(`npm audit did not return a candidate summary for ${file}:`, audit.error || 'unknown error');
+              process.exit(1);
             }
-            if ((counts.high || 0) > 0) {
-              console.log(`::warning::High-severity npm vulnerabilities exist in ${file} and require triage.`);
+            console.log(`Candidate dependency audit scope: ${file}`);
+            console.log('npm audit candidate severity counts:', JSON.stringify(counts));
+            for (const [name, advisory] of Object.entries(audit.vulnerabilities || {})) {
+              const fix = advisory.fixAvailable;
+              const fixLabel = fix === true ? 'available (non-breaking)' :
+                fix === false ? 'no automatic fix' :
+                fix ? 'available (may require a version change)' : 'unknown';
+              const via = (advisory.via || []).map((item) =>
+                typeof item === 'string' ? item : item.title
+              ).filter(Boolean);
+              console.log(
+                `::warning title=${advisory.severity.toUpperCase()} candidate dependency ${name}::scope=${file}; severity=${advisory.severity}; direct=${advisory.isDirect}; range=${advisory.range}; fix=${fixLabel}; advisories=${via.join('; ')}`
+              );
             }
           }
           NODE
 
-      - name: Upload npm audit reports
+      # Publish only into a same-repository security/* PR, after installation and tests succeed.
+      - name: Publish validated lockfile candidate to this security PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'security/')
+        shell: bash
+        env:
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          cp package-lock.json "$RUNNER_TEMP/package-lock-candidate.json"
+          git fetch origin "$PR_BRANCH"
+          git checkout -B "$PR_BRANCH" "origin/$PR_BRANCH"
+          cp "$RUNNER_TEMP/package-lock-candidate.json" package-lock.json
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "No dependency lockfile changes to publish."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "fix(security): update vulnerable dependency lockfile"
+            git push origin "HEAD:$PR_BRANCH"
+          fi
+
+      - name: Upload audit reports and proposed lockfile
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-npm-audit-reports
-          path: npm-audit-*.json
+          name: backend-lockfile-security-fix-candidate
+          path: |
+            npm-audit-*.json
+            package-lock.json
           if-no-files-found: warn
           retention-days: 14
