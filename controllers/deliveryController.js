@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const User = require('../models/User');
 const { sendPushToUser } = require('../utils/pushNotifications');
+const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const normalizeString = (value) => String(value || '').trim();
@@ -693,7 +694,26 @@ const updateDeliveryMissionStatus = async (req, res) => {
       });
     }
 
+    const deliveryPayment = evaluateDeliveryPayment({
+      nextStatus,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+    });
+
+    if (!deliveryPayment.allowed) {
+      return res.status(409).json({
+        success: false,
+        code: deliveryPayment.code,
+        message: deliveryPayment.message,
+      });
+    }
+
     order.status = nextStatus;
+
+    if (deliveryPayment.cashPaymentCollected) {
+      order.paymentStatus = 'Payé';
+      setIfSchemaPathExists(order, 'paidAt', new Date());
+    }
 
     if (nextStatus === 'En livraison') {
       setIfSchemaPathExists(order, 'pickedUpAt', new Date());
@@ -708,7 +728,9 @@ const updateDeliveryMissionStatus = async (req, res) => {
     pushStatusHistoryIfSupported(order, nextStatus, {
       _id: driver._id,
       role: 'livreur',
-      note: normalizeString(req.body?.note),
+      note: deliveryPayment.cashPaymentCollected
+        ? normalizeString(req.body?.note) || 'Paiement à la livraison perçu'
+        : normalizeString(req.body?.note),
     });
 
     await order.save();
