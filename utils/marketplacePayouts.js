@@ -23,6 +23,13 @@ const isTransferCountryAllowed = (countryCode, env = process.env) => {
   return country === platformCountry || crossBorderCountries.includes(country);
 };
 
+const isPartialRefundCharge = (charge) => {
+  const amount = Number(charge?.amount || 0);
+  const refunded = Number(charge?.amount_refunded || 0);
+  return Number.isFinite(amount) && Number.isFinite(refunded) &&
+    amount > 0 && refunded > 0 && refunded < amount;
+};
+
 const getStripe = () => {
   const secretKey = String(process.env.STRIPE_SECRET_KEY || '').trim();
   if (!secretKey) throw new Error('STRIPE_SECRET_KEY est manquant.');
@@ -208,7 +215,7 @@ const reverseOrderTransfers = async (order, charge) => {
   if (order.payoutStatus === 'manually_reconciled') {
     return { success: true, reason: 'manually_reconciled' };
   }
-  if (Number(charge?.amount_refunded || 0) < Number(charge?.amount || 0)) {
+  if (isPartialRefundCharge(charge)) {
     await markReconciliationRequired(
       order,
       'Remboursement partiel : les transferts doivent être rapprochés manuellement.'
@@ -315,4 +322,5 @@ module.exports = {
   reconcileOrderPayout,
   flagOrderDispute,
   toStripeAmount,
+  isPartialRefundCharge,
 };
