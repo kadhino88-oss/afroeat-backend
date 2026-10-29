@@ -1,4 +1,8 @@
 const mongoose = require('mongoose');
+const {
+  normalizeIdempotencyKey,
+  createOrderRequestFingerprint,
+} = require('../utils/orderIdempotency');
 
 const Order = require('../models/Order');
 const User = require('../models/User');
@@ -583,6 +587,32 @@ const getOrderById = async (req, res) => {
 };
 
 const createOrder = async (req, res) => {
+  let orderUser = null;
+  let idempotencyKey = null;
+  let requestFingerprint = null;
+
+  const respondWithExistingOrder = async (existingOrder) => {
+    if (!existingOrder) return false;
+
+    if (!requestFingerprint || existingOrder.requestFingerprint !== requestFingerprint) {
+      res.status(409).json({
+        success: false,
+        code: 'IDEMPOTENCY_KEY_REUSED',
+        message: 'Cette clé a déjà été utilisée pour une autre commande. Relance avec une nouvelle clé.',
+      });
+      return true;
+    }
+
+    const populatedOrder = await populateOrder(Order.findById(existingOrder._id));
+    res.status(200).json({
+      success: true,
+      duplicate: true,
+      message: 'Cette commande avait déjà été enregistrée.',
+      order: sanitizeOrderForResponse(populatedOrder),
+    });
+    return true;
+  };
+
   try {
     const {
       user,
@@ -594,7 +624,7 @@ const createOrder = async (req, res) => {
       donationAmount,
     } = req.body || {};
 
-    const orderUser = req.user.role === 'client' ? req.user._id : user;
+    orderUser = req.user.role === 'client' ? req.user._id : user;
 
     if (!orderUser || !restaurant || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -627,6 +657,43 @@ const createOrder = async (req, res) => {
         code: 'DELIVERY_ADDRESS_REQUIRED',
         message: 'Le champ deliveryAddress est obligatoire.',
       });
+    }
+
+    const keyResult = normalizeIdempotencyKey(
+      req.get?.('Idempotency-Key') || req.body?.idempotencyKey
+    );
+    if (!keyResult.ok) {
+      return res.status(400).json({
+        success: false,
+        code: keyResult.code,
+        message: keyResult.message,
+      });
+    }
+    idempotencyKey = keyResult.key;
+
+    const requestedResult = normalizeRequestedOrderItems(items, isValidObjectId);
+    if (!requestedResult.ok) {
+      return res.status(400).json({
+        success: false,
+        code: requestedResult.code,
+        message: requestedResult.message,
+      });
+    }
+
+    const safeNotes = normalizeString(notes).slice(0, 500);
+    if (idempotencyKey) {
+      requestFingerprint = createOrderRequestFingerprint({
+        restaurant: String(restaurant),
+        items: requestedResult.items,
+        deliveryAddress: safeDeliveryAddress,
+        notes: safeNotes,
+      });
+
+      const previousOrder = await Order.findOne({ user: orderUser, idempotencyKey });
+      if (previousOrder) {
+        await respondWithExistingOrder(previousOrder);
+        return;
+      }
     }
 
     const restaurantExists = await Restaurant.findById(restaurant).select(
@@ -667,9 +734,8 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const requestedDonation = donationAmount === undefined || donationAmount === null
-      ? 0
-      : Number(donationAmount);
+    const requestedDonation =
+      donationAmount === undefined || donationAmount === null ? 0 : Number(donationAmount);
 
     if (!Number.isFinite(requestedDonation) || requestedDonation < 0 || requestedDonation > 100) {
       return res.status(400).json({
@@ -686,15 +752,6 @@ const createOrder = async (req, res) => {
         success: false,
         code: 'DONATIONS_NOT_CONFIGURED',
         message: 'Les dons Afroeat Impact sont temporairement indisponibles.',
-      });
-    }
-
-    const requestedResult = normalizeRequestedOrderItems(items, isValidObjectId);
-    if (!requestedResult.ok) {
-      return res.status(400).json({
-        success: false,
-        code: requestedResult.code,
-        message: requestedResult.message,
       });
     }
 
@@ -759,12 +816,13 @@ const createOrder = async (req, res) => {
       paymentStatus: 'Non payé',
       paymentMethod: null,
       deliveryPerson: null,
-      notes: normalizeString(notes).slice(0, 500),
+      notes: safeNotes,
       customerLocation: safeCustomerLocation,
       restaurantLocation: safeRestaurantLocation,
       deliveryFee: pricing.deliveryFee,
       donationAmount: 0,
       driverEarning: pricing.driverEarning,
+      ...(idempotencyKey ? { idempotencyKey, requestFingerprint } : {}),
       statusHistory: [
         {
           status: initialStatus,
@@ -776,7 +834,22 @@ const createOrder = async (req, res) => {
       ],
     });
 
-    const savedOrder = await newOrder.save();
+    let savedOrder;
+    try {
+      savedOrder = await newOrder.save();
+    } catch (error) {
+      // Concurrent retries can pass the first lookup together; the compound
+      // unique index makes only one insert win and the loser returns that order.
+      if (idempotencyKey && error?.code === 11000) {
+        const existingOrder = await Order.findOne({ user: orderUser, idempotencyKey });
+        if (existingOrder) {
+          await respondWithExistingOrder(existingOrder);
+          return;
+        }
+      }
+      throw error;
+    }
+
     const populatedOrder = await populateOrder(Order.findById(savedOrder._id));
     const safeOrder = sanitizeOrderForResponse(populatedOrder);
 
