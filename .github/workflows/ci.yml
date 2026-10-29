@@ -25,3 +25,9 @@ jobs:
         run: npm test
       - name: Verify installed dependency tree
         run: npm ls --depth=0
+
+      - name: Report dependency audit details
+        continue-on-error: true
+        run: |
+          npm audit --json > /tmp/npm-audit.json || true
+          node -e "const a=require('/tmp/npm-audit.json'); console.log(JSON.stringify({metadata:a.metadata?.vulnerabilities, advisories:Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:x.title)}))}, null, 2))"
