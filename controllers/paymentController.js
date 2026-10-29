@@ -199,9 +199,12 @@ const createPaymentIntent = async (req, res) => {
       });
     }
 
-    // This repository snapshot does not implement Stripe Connect onboarding,
-    // approved split rates or payout reconciliation. Fail closed in production
-    // until those marketplace controls are implemented and tested.
+    // Stripe Connect onboarding, marketplace split calculation and payout
+    // reconciliation are implemented, but the complete settlement path has not
+    // yet passed end-to-end verification with Stripe and MongoDB. Keep production
+    // card payments fail-closed until staging verification covers payment, delivery,
+    // payout, refund, dispute and reconciliation paths. Unit tests alone are not
+    // sufficient to remove this safeguard.
     if (process.env.NODE_ENV === 'production') {
       return res.status(503).json({
         success: false,
