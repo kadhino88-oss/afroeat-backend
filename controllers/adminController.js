@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const Order = require('../models/Order');
 const { createAuditLog } = require('./adminAuditController');
+const { validateCourierVerificationUpdate } = require('../utils/courierAssignmentEligibility');
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -598,6 +599,116 @@ const updateAdminUserStatus = async (req, res) => {
   }
 };
 
+const updateAdminUserVerification = async (req, res) => {
+  try {
+    if (!ensureAdmin(req, res)) return;
+
+    const { id } = req.params;
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_USER_ID',
+        message: 'ID utilisateur invalide.',
+      });
+    }
+
+    const decision = validateCourierVerificationUpdate(req.body);
+    if (!decision.ok) {
+      return res.status(decision.status).json({
+        success: false,
+        code: decision.code,
+        message: decision.message,
+      });
+    }
+
+    const existingUser = await User.findById(id).select(
+      '_id name email role accountStatus isIdentityVerified isWorkAuthorized isAvailable'
+    );
+
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        code: 'USER_NOT_FOUND',
+        message: 'Utilisateur introuvable.',
+      });
+    }
+
+    if (existingUser.role !== 'livreur') {
+      return res.status(400).json({
+        success: false,
+        code: 'COURIER_VERIFICATION_ONLY',
+        message: 'Cette action est réservée aux comptes livreur.',
+      });
+    }
+
+    const previousIdentityVerified = existingUser.isIdentityVerified === true;
+    const previousWorkAuthorized = existingUser.isWorkAuthorized === true;
+
+    if (
+      previousIdentityVerified === decision.isIdentityVerified &&
+      previousWorkAuthorized === decision.isWorkAuthorized
+    ) {
+      return res.status(200).json({
+        success: true,
+        message: 'Aucun changement nécessaire.',
+        user: {
+          _id: existingUser._id,
+          name: existingUser.name || '',
+          email: existingUser.email || '',
+          role: existingUser.role,
+          accountStatus: existingUser.accountStatus,
+          isIdentityVerified: previousIdentityVerified,
+          isWorkAuthorized: previousWorkAuthorized,
+          isAvailable: existingUser.isAvailable === true,
+        },
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      {
+        isIdentityVerified: decision.isIdentityVerified,
+        isWorkAuthorized: decision.isWorkAuthorized,
+      },
+      { new: true, runValidators: true }
+    ).select(
+      '_id name email role accountStatus isIdentityVerified isWorkAuthorized isAvailable'
+    );
+
+    await safeCreateAuditLog({
+      req,
+      action: 'update_courier_verification',
+      targetType: 'driver',
+      targetId: updatedUser?._id || id,
+      targetLabel: `${normalizeString(updatedUser?.name)} <${normalizeString(updatedUser?.email)}>`,
+      details: decision.note || 'Vérification du livreur révoquée.',
+      metadata: {
+        previousIdentityVerified,
+        previousWorkAuthorized,
+        isIdentityVerified: decision.isIdentityVerified,
+        isWorkAuthorized: decision.isWorkAuthorized,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Vérification du livreur enregistrée.',
+      user: {
+        _id: updatedUser._id,
+        name: updatedUser.name || '',
+        email: updatedUser.email || '',
+        role: updatedUser.role,
+        accountStatus: updatedUser.accountStatus,
+        isIdentityVerified: updatedUser.isIdentityVerified === true,
+        isWorkAuthorized: updatedUser.isWorkAuthorized === true,
+        isAvailable: updatedUser.isAvailable === true,
+      },
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'ADMIN UPDATE COURIER VERIFICATION ERROR');
+  }
+};
+
 const getAdminRestaurants = async (req, res) => {
   try {
     if (!ensureAdmin(req, res)) return;
@@ -820,6 +931,7 @@ module.exports = {
   getAdminUsers,
   getAdminUserById,
   updateAdminUserStatus,
+  updateAdminUserVerification,
   getAdminRestaurants,
   getAdminRestaurantById,
   getAdminDrivers,
