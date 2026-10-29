@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const MenuItem = require('../models/MenuItem');
 const { getMarketplaceRates } = require('../config/marketplaceRates');
+const { calculateMarketplaceSplit } = require('../utils/marketplaceAccounting');
 const { priceRequestedOrderItems } = require('../utils/orderPricing');
 const {
   createOrderRequestFingerprint,
@@ -803,12 +804,19 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const commissionRateBps = marketplaceRates?.commissionBps || 0;
-    const courierPayoutRateBps = marketplaceRates?.courierPayoutBps || 0;
-    const platformCommissionAmount = roundMoney(itemsSubtotal * commissionRateBps / 10000);
-    const restaurantEarning = roundMoney(itemsSubtotal - platformCommissionAmount);
-    const driverEarning = roundMoney(safeDeliveryFee * courierPayoutRateBps / 10000);
-    const platformDeliveryEarning = roundMoney(safeDeliveryFee - driverEarning);
+    const marketplaceSplit = calculateMarketplaceSplit({
+      itemsSubtotal,
+      deliveryFee: safeDeliveryFee,
+      rates: marketplaceRates,
+    });
+    const {
+      commissionRateBps,
+      courierPayoutRateBps,
+      platformCommissionAmount,
+      restaurantEarning,
+      driverEarning,
+      platformDeliveryEarning,
+    } = marketplaceSplit;
     const assignedDriverId = null;
     const safeCustomerLocation = normalizeCoordinates(customerLocation);
 
