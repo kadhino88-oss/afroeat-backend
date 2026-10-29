@@ -6,6 +6,7 @@ const {
   isTransferCountryAllowed,
   isPartnerReadyForTransfers,
   toStripeAmount,
+  isPartialRefundCharge,
 } = require('../utils/marketplacePayouts');
 
 const envKeys = [
@@ -73,3 +74,10 @@ test('Stripe amounts use zero decimals for XOF/XAF and cents for supported decim
   assert.equal(toStripeAmount(Number.MAX_VALUE, 'EUR'), null);
 });
 
+test('classifies partial refunds even before any transfer exists', () => {
+  assert.equal(isPartialRefundCharge({ amount: 10000, amount_refunded: 1000 }), true);
+  assert.equal(isPartialRefundCharge({ amount: 10000, amount_refunded: 10000 }), false);
+  assert.equal(isPartialRefundCharge({ amount: 10000, amount_refunded: 0 }), false);
+  assert.equal(isPartialRefundCharge({ amount: 0, amount_refunded: 0 }), false);
+  assert.equal(isPartialRefundCharge({ amount: 10000, amount_refunded: NaN }), false);
+});
