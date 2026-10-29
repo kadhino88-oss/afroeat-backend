@@ -12,6 +12,7 @@ const {
   isValidIdempotencyKey,
 } = require('../utils/orderIdempotency');
 const { sendPushToUser } = require('../utils/pushNotifications');
+const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -992,6 +993,15 @@ const updateOrderStatus = async (req, res) => {
     });
 
     await order.save();
+
+    if (nextStatus === 'Livrée') {
+      try {
+        await createDeliveredOrderTransfers(order._id);
+      } catch (payoutError) {
+        // Delivery status is already persisted; payout reconciliation can retry separately.
+        console.error('AFROEAT PAYOUT RECONCILIATION ERROR =>', payoutError?.message);
+      }
+    }
 
     sendPushToUser(order.user, {
       title: 'Afroeat',
