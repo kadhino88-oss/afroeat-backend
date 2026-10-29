@@ -1,0 +1,76 @@
+name: Dependency Security Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate npm audit report
+        shell: bash
+        run: npm audit --json > npm-audit-report.json || test -s npm-audit-report.json
+
+      - name: Summarize vulnerability baseline
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const audit = JSON.parse(fs.readFileSync('npm-audit-report.json', 'utf8'));
+          const counts = audit.metadata?.vulnerabilities;
+          if (!counts) {
+            console.error('npm audit did not return a vulnerability summary:', audit.error || 'unknown error');
+            process.exit(1);
+          }
+
+          console.log('npm audit severity counts:', JSON.stringify(counts));
+          for (const [name, advisory] of Object.entries(audit.vulnerabilities || {})) {
+            const fix = advisory.fixAvailable;
+            const fixLabel = fix === true ? 'available (non-breaking)' :
+              fix === false ? 'no automatic fix' :
+              fix ? 'available (may require a version change)' : 'unknown';
+            const via = (advisory.via || []).map((item) =>
+              typeof item === 'string' ? item : item.title
+            ).filter(Boolean);
+            console.log(
+              `::warning title=${advisory.severity.toUpperCase()} dependency ${name}::severity=${advisory.severity}; direct=${advisory.isDirect}; range=${advisory.range}; fix=${fixLabel}; advisories=${via.join('; ')}`
+            );
+          }
+
+          if ((counts.critical || 0) > 0) {
+            console.log('::warning::Critical npm vulnerabilities exist and must be remediated before production release.');
+          }
+          if ((counts.high || 0) > 0) {
+            console.log('::warning::High-severity npm vulnerabilities exist and require triage.');
+          }
+          NODE
+
+      - name: Upload npm audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-npm-audit-report
+          path: npm-audit-report.json
+          if-no-files-found: warn
+          retention-days: 14
