@@ -120,6 +120,7 @@ jobs:
           }
           NODE
 
+      # Publish only into a same-repository security/* PR, after installation and tests succeed.
       - name: Publish validated lockfile candidate to this security PR
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'security/')
         shell: bash
