@@ -79,7 +79,29 @@ const userSchema = new mongoose.Schema(
       maxlength: [300, 'L’adresse est trop longue'],
     },
 
+    // Pays ISO du titulaire du compte de versement Stripe Connect.
+    countryCode: {
+      type: String,
+      default: '',
+      trim: true,
+      uppercase: true,
+      match: [/^$|^[A-Z]{2}$/, 'Le code pays doit contenir deux lettres'],
+    },
+
     profileImage: fileUrlField,
+
+    stripeConnectAccountId: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [120, 'Identifiant Stripe Connect invalide'],
+      index: { sparse: true },
+    },
+
+    stripeConnectDetailsSubmitted: { type: Boolean, default: false },
+    stripeConnectTransfersEnabled: { type: Boolean, default: false },
+    stripeConnectPayoutsEnabled: { type: Boolean, default: false },
+    stripeConnectRequirementsDueCount: { type: Number, default: 0, min: 0 },
 
     pushToken: {
       type: String,
