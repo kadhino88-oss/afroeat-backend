@@ -18,6 +18,7 @@ const { sendPushToUser } = require('../utils/pushNotifications');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 const { getMarketplaceRates } = require('../config/marketplaceRates');
 const { calculateMarketplaceSplit } = require('../utils/marketplaceAccounting');
+const { isConnectPayoutsEnabled } = require('../utils/marketplacePayouts');
 const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -800,7 +801,26 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const marketplaceRates = getMarketplaceRates(pricing.currency);
+    let marketplaceRates;
+    try {
+      marketplaceRates = getMarketplaceRates(pricing.currency);
+    } catch (configurationError) {
+      console.error('AFROEAT MARKETPLACE RATE CONFIG ERROR =>', configurationError?.message);
+      return res.status(503).json({
+        success: false,
+        code: 'MARKETPLACE_RATES_UNAVAILABLE',
+        message: 'Les taux de répartition des paiements ne sont pas configurés correctement.',
+      });
+    }
+
+    if (isConnectPayoutsEnabled() && !marketplaceRates) {
+      return res.status(503).json({
+        success: false,
+        code: 'MARKETPLACE_RATES_UNAVAILABLE',
+        message: 'Les taux de répartition ne sont pas configurés pour cette devise.',
+      });
+    }
+
     const marketplaceSplit = calculateMarketplaceSplit({
       itemsSubtotal: pricing.subtotal,
       deliveryFee: pricing.deliveryFee,
