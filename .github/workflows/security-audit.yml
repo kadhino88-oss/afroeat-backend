@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   audit:
@@ -119,6 +119,26 @@ jobs:
             }
           }
           NODE
+
+      - name: Publish validated lockfile candidate to this security PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'security/')
+        shell: bash
+        env:
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          cp package-lock.json "$RUNNER_TEMP/package-lock-candidate.json"
+          git fetch origin "$PR_BRANCH"
+          git checkout -B "$PR_BRANCH" "origin/$PR_BRANCH"
+          cp "$RUNNER_TEMP/package-lock-candidate.json" package-lock.json
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "No dependency lockfile changes to publish."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "fix(security): update vulnerable dependency lockfile"
+            git push origin "HEAD:$PR_BRANCH"
+          fi
 
       - name: Upload audit reports and proposed lockfile
         if: always()
