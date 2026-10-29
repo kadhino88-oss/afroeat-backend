@@ -51,7 +51,6 @@ const isPartnerReadyForTransfers = (user) => {
       !user?.stripeConnectPayoutsEnabled) {
     return false;
   }
-  if (!isConnectPayoutsEnabled()) return true;
   return isTransferCountryAllowed(user.countryCode);
 };
 
