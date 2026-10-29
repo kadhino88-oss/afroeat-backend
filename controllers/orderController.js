@@ -13,6 +13,10 @@ const {
   buildTrustedOrderItems,
   calculateRestaurantPricing,
 } = require('../utils/orderPricing');
+const {
+  normalizeIdempotencyKey,
+  createOrderRequestFingerprint,
+} = require('../utils/orderIdempotency');
 const { sendPushToUser } = require('../utils/pushNotifications');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 
