@@ -80,17 +80,27 @@ const getConnectStatus = async (req, res) => {
 
     if (!user.stripeConnectAccountId) {
       return res.status(200).json({
-        success: true, connected: false, detailsSubmitted: false,
-        transfersEnabled: false, payoutsEnabled: false, requirementsDueCount: 0,
+        success: true,
+        connected: false,
+        accountReady: false,
+        payoutsFeatureEnabled: require('../utils/marketplacePayouts').isConnectPayoutsEnabled(),
+        detailsSubmitted: false,
+        transfersEnabled: false,
+        payoutsEnabled: false,
+        requirementsDueCount: 0,
         countryCode: user.countryCode || '',
       });
     }
 
     const account = await getStripe().accounts.retrieve(user.stripeConnectAccountId);
     await refreshAccountStatus(user, account);
+    const accountReady = isPartnerReadyForTransfers(user);
+    const payoutsFeatureEnabled = require('../utils/marketplacePayouts').isConnectPayoutsEnabled();
     return res.status(200).json({
       success: true,
-      connected: isPartnerReadyForTransfers(user),
+      connected: accountReady && payoutsFeatureEnabled,
+      accountReady,
+      payoutsFeatureEnabled,
       detailsSubmitted: user.stripeConnectDetailsSubmitted,
       transfersEnabled: user.stripeConnectTransfersEnabled,
       payoutsEnabled: user.stripeConnectPayoutsEnabled,
