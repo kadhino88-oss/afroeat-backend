@@ -65,6 +65,12 @@ jobs:
           }
           NODE
 
+      - name: Enforce committed dependency baseline outside security PRs
+        if: github.event_name != 'pull_request' || !startsWith(github.event.pull_request.head.ref, 'security/')
+        run: |
+          npm audit --audit-level=moderate
+          npm audit --omit=dev --audit-level=moderate
+
       - name: Generate non-forced lockfile fix candidate
         shell: bash
         run: |
@@ -119,6 +125,11 @@ jobs:
             }
           }
           NODE
+
+      - name: Enforce clean candidate dependency audit
+        run: |
+          npm audit --audit-level=moderate
+          npm audit --omit=dev --audit-level=moderate
 
       # Publish only into a same-repository security/* PR, after installation and tests succeed.
       - name: Publish validated lockfile candidate to this security PR
