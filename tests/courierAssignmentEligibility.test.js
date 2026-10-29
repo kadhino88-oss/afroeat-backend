@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {
   evaluateCourierAssignmentEligibility,
   validateCourierVerificationUpdate,
+  evaluateCourierAvailabilityChange,
 } = require('../utils/courierAssignmentEligibility');
 
 const eligibleCourier = () => ({
@@ -127,4 +128,41 @@ test('rejects overlong audit notes', () => {
   });
   assert.equal(result.ok, false);
   assert.equal(result.code, 'COURIER_VERIFICATION_NOTE_TOO_LONG');
+});
+
+
+test('prevents unverified couriers from activating availability', () => {
+  const result = evaluateCourierAvailabilityChange({
+    role: 'livreur',
+    isIdentityVerified: false,
+    isWorkAuthorized: false,
+  }, true);
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 403);
+  assert.equal(result.code, 'COURIER_VERIFICATION_REQUIRED');
+});
+
+test('allows verified and authorized couriers to activate availability', () => {
+  const result = evaluateCourierAvailabilityChange({
+    role: 'livreur',
+    isIdentityVerified: true,
+    isWorkAuthorized: true,
+  }, true);
+  assert.equal(result.ok, true);
+  assert.equal(result.code, 'COURIER_AVAILABILITY_VALID');
+});
+
+test('allows a courier to deactivate availability even when verification is revoked', () => {
+  const result = evaluateCourierAvailabilityChange({
+    role: 'livreur',
+    isIdentityVerified: false,
+    isWorkAuthorized: false,
+  }, false);
+  assert.equal(result.ok, true);
+});
+
+test('rejects availability changes for non-courier accounts', () => {
+  const result = evaluateCourierAvailabilityChange({ role: 'client' }, true);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'INVALID_COURIER');
 });
