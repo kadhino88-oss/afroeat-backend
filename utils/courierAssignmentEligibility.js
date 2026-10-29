@@ -56,4 +56,64 @@ const evaluateCourierAssignmentEligibility = (courier) => {
   return { ok: true, status: 200, code: 'COURIER_ELIGIBLE', message: '' };
 };
 
-module.exports = { evaluateCourierAssignmentEligibility };
+/**
+ * Validate the explicit decision an administrator makes after reviewing
+ * courier documents. The note becomes part of the audit trail.
+ */
+const validateCourierVerificationUpdate = (payload = {}) => {
+  const { isIdentityVerified, isWorkAuthorized } = payload;
+  const note = String(payload.note ?? '').trim();
+
+  if (
+    typeof isIdentityVerified !== 'boolean' ||
+    typeof isWorkAuthorized !== 'boolean'
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'COURIER_VERIFICATION_FLAGS_REQUIRED',
+      message: 'Les deux décisions de vérification doivent être explicites.',
+    };
+  }
+
+  if (isWorkAuthorized && !isIdentityVerified) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'WORK_AUTH_REQUIRES_IDENTITY_VERIFICATION',
+      message: 'L’identité doit être vérifiée avant de valider l’autorisation de travail.',
+    };
+  }
+
+  if ((isIdentityVerified || isWorkAuthorized) && note.length < 8) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'COURIER_VERIFICATION_NOTE_REQUIRED',
+      message: 'Ajoute une note d’audit décrivant le contrôle documentaire effectué.',
+    };
+  }
+
+  if (note.length > 500) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'COURIER_VERIFICATION_NOTE_TOO_LONG',
+      message: 'La note de vérification ne doit pas dépasser 500 caractères.',
+    };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    code: 'COURIER_VERIFICATION_VALID',
+    isIdentityVerified,
+    isWorkAuthorized,
+    note,
+  };
+};
+
+module.exports = {
+  evaluateCourierAssignmentEligibility,
+  validateCourierVerificationUpdate,
+};
