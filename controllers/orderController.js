@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const { sendPushToUser } = require('../utils/pushNotifications');
+const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -849,7 +850,26 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
+    const deliveryPayment = evaluateDeliveryPayment({
+      nextStatus,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+    });
+
+    if (!deliveryPayment.allowed) {
+      return res.status(409).json({
+        success: false,
+        code: deliveryPayment.code,
+        message: deliveryPayment.message,
+      });
+    }
+
     order.status = nextStatus;
+
+    if (deliveryPayment.cashPaymentCollected) {
+      order.paymentStatus = 'Payé';
+      order.paidAt = new Date();
+    }
 
     if (nextStatus === 'En livraison') {
       if (!order.deliveryStartedAt) {
@@ -873,7 +893,9 @@ const updateOrderStatus = async (req, res) => {
       status: nextStatus,
       updatedBy: req.user?._id || null,
       updatedByRole: req.user?.role || '',
-      note,
+      note: deliveryPayment.cashPaymentCollected
+        ? normalizeString(note, 'Paiement à la livraison perçu')
+        : note,
     });
 
     await order.save();
