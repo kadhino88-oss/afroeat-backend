@@ -4,6 +4,10 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const { sendPushToUser } = require('../utils/pushNotifications');
+const {
+  createOrderRequestFingerprint,
+  isValidIdempotencyKey,
+} = require('../utils/orderIdempotency');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -578,6 +582,9 @@ const getOrderById = async (req, res) => {
 };
 
 const createOrder = async (req, res) => {
+  let orderUser = null;
+  let rawIdempotencyKey = '';
+  let requestFingerprint = null;
   try {
     const {
       user,
@@ -597,7 +604,18 @@ const createOrder = async (req, res) => {
       donationAmount,
     } = req.body;
 
-    const orderUser = req.user.role === 'client' ? req.user._id : user;
+    orderUser = req.user.role === 'client' ? req.user._id : user;
+
+    // A stable idempotency key makes order creation safe to retry after timeouts.
+    rawIdempotencyKey = normalizeString(
+      req.get('Idempotency-Key') || req.body?.idempotencyKey
+    );
+    if (rawIdempotencyKey && !isValidIdempotencyKey(rawIdempotencyKey)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Clé de requête invalide.',
+      });
+    }
 
     if (!orderUser || !restaurant || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -648,6 +666,39 @@ const createOrder = async (req, res) => {
         success: false,
         message: 'Le champ deliveryAddress est obligatoire.',
       });
+    }
+
+    const requestedItemsForFingerprint = normalizeItems(items);
+    requestFingerprint = rawIdempotencyKey
+      ? createOrderRequestFingerprint({
+          restaurant,
+          items: requestedItemsForFingerprint,
+          deliveryAddress: safeDeliveryAddress,
+          notes,
+        })
+      : null;
+
+    if (rawIdempotencyKey) {
+      const previousOrder = await Order.findOne({
+        user: orderUser,
+        idempotencyKey: rawIdempotencyKey,
+      });
+      if (previousOrder) {
+        if (previousOrder.requestFingerprint !== requestFingerprint) {
+          return res.status(409).json({
+            success: false,
+            code: 'IDEMPOTENCY_KEY_REUSED',
+            message: 'Cette clé a déjà été utilisée pour une autre commande. Relance avec une nouvelle clé.',
+          });
+        }
+        const populatedPreviousOrder = await populateOrder(Order.findById(previousOrder._id));
+        return res.status(200).json({
+          success: true,
+          duplicate: true,
+          message: 'Cette commande avait déjà été enregistrée.',
+          order: sanitizeOrderForResponse(populatedPreviousOrder),
+        });
+      }
     }
 
     const restaurantExists = await Restaurant.findById(restaurant).select(
@@ -772,6 +823,9 @@ const createOrder = async (req, res) => {
     const newOrder = new Order({
       user: orderUser,
       restaurant,
+      ...(rawIdempotencyKey
+        ? { idempotencyKey: rawIdempotencyKey, requestFingerprint }
+        : {}),
       items: normalizedItems,
       totalPrice: expectedTotal,
       currency: normalizeString(currency || 'EUR') || 'EUR',
@@ -806,6 +860,33 @@ const createOrder = async (req, res) => {
       order: safeOrder,
     });
   } catch (error) {
+    if (error?.code === 11000 && rawIdempotencyKey && orderUser) {
+      try {
+        const existingOrder = await Order.findOne({
+          user: orderUser,
+          idempotencyKey: rawIdempotencyKey,
+        });
+        if (existingOrder) {
+          if (existingOrder.requestFingerprint !== requestFingerprint) {
+            return res.status(409).json({
+              success: false,
+              code: 'IDEMPOTENCY_KEY_REUSED',
+              message: 'Cette clé a déjà été utilisée pour une autre commande. Relance avec une nouvelle clé.',
+            });
+          }
+          const populatedExistingOrder = await populateOrder(Order.findById(existingOrder._id));
+          return res.status(200).json({
+            success: true,
+            duplicate: true,
+            message: 'Cette commande avait déjà été enregistrée.',
+            order: sanitizeOrderForResponse(populatedExistingOrder),
+          });
+        }
+      } catch (lookupError) {
+        console.error('Erreur vérification idempotence commande :', lookupError.message);
+      }
+    }
+
     console.error('Erreur création commande :', {
       message: error.message,
       stack: error.stack,
