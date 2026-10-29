@@ -13,6 +13,17 @@ const {
   refundPayment,
 } = require('../controllers/paymentController');
 
+const {
+  getConnectStatus,
+  startConnectOnboarding,
+  createConnectDashboardLink,
+  refreshConnectOnboarding,
+  connectReturnPage,
+  reconcileDeliveredOrderTransfers,
+  listPayoutReconciliation,
+  resolvePayoutReconciliation,
+} = require('../controllers/connectController');
+
 const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
 
@@ -45,6 +56,15 @@ router.post(
   allowRoles('client', 'admin'),
   selectCashPayment
 );
+
+router.get('/connect/return', connectReturnPage);
+router.get('/connect/refresh', refreshConnectOnboarding);
+router.get('/connect/status', protect, allowRoles('restaurant', 'livreur'), getConnectStatus);
+router.post('/connect/onboarding-link', protect, allowRoles('restaurant', 'livreur'), startConnectOnboarding);
+router.post('/connect/dashboard-link', protect, allowRoles('restaurant', 'livreur'), createConnectDashboardLink);
+router.post('/connect/reconcile/:orderId', protect, allowRoles('admin'), reconcileDeliveredOrderTransfers);
+router.get('/connect/reconciliation', protect, allowRoles('admin'), listPayoutReconciliation);
+router.post('/connect/reconciliation/:orderId/resolve', protect, allowRoles('admin'), resolvePayoutReconciliation);
 
 router.post(
   '/refund',
