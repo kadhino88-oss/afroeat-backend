@@ -44,14 +44,24 @@ const getMinAmount = (currency) => {
   return config ? config.minAmount : null;
 };
 
+const hasStripeTestSecret = () =>
+  /^(sk|rk)_test_/.test(String(process.env.STRIPE_SECRET_KEY || ''));
+
 const canCreateDevelopmentCardPayment = () =>
-  process.env.NODE_ENV !== 'production' && Boolean(stripe);
+  process.env.NODE_ENV !== 'production' && Boolean(stripe) && hasStripeTestSecret();
 
 const stripeUnavailable = (res) =>
   res.status(503).json({
     success: false,
     code: 'STRIPE_NOT_CONFIGURED',
     message: 'Les paiements par carte sont temporairement indisponibles.',
+  });
+
+const stripeTestKeyRequired = (res) =>
+  res.status(503).json({
+    success: false,
+    code: 'STRIPE_TEST_KEY_REQUIRED',
+    message: 'Une clé Stripe de test est requise pour les paiements en environnement de développement.',
   });
 
 const getOrderAmount = (order) => {
@@ -184,7 +194,8 @@ const createPaymentIntent = async (req, res) => {
       });
     }
 
-    if (!canCreateDevelopmentCardPayment()) return stripeUnavailable(res);
+    if (!stripe) return stripeUnavailable(res);
+    if (!canCreateDevelopmentCardPayment()) return stripeTestKeyRequired(res);
 
     const currency = normalizeString(order.currency, 'EUR').toUpperCase();
     const amount = getOrderAmount(order);
@@ -665,7 +676,7 @@ const getAvailablePaymentMethods = (req, res) => {
     methods: {
       // Production remains fail-closed until Connect, approved splits and
       // payout reconciliation are implemented and reviewed.
-      card: !isProduction && Boolean(stripe),
+      card: !isProduction && Boolean(stripe) && hasStripeTestSecret(),
       // Cash remains unavailable in production until collection and
       // settlement reconciliation are implemented.
       cash: !isProduction,
