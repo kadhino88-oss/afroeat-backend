@@ -105,6 +105,11 @@ const buildRestaurantFilters = (query = {}) => {
   const city    = normalizeText(query.city);
   const country = normalizeText(query.country);
   const ownerId = normalizeText(query.ownerId);
+  const businessType = normalizeText(query.businessType);
+
+  // Business-type filters connect the Home/Explore category chips to the
+  // authoritative merchant catalog instead of relying on client-only filtering.
+  if (businessType) filters.businessType = normalizeBusinessType(businessType);
 
   if (search) {
     const regex = new RegExp(escapeRegex(search), 'i');
@@ -456,6 +461,7 @@ const getRestaurants = async (req, res) => {
         city:     normalizeText(req.query.city),
         country:  normalizeText(req.query.country),
         ownerId:  normalizeText(req.query.ownerId),
+        businessType: normalizeText(req.query.businessType),
         sort,
         isOpen:   req.query.isOpen,
         isActive: req.query.isActive,
