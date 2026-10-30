@@ -344,6 +344,9 @@ const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
   if (payload.deliveryFee < 0) throw new Error('Les frais de livraison sont invalides.');
 
   if (reqBody.isOpen    !== undefined) payload.isOpen    = normalizeBoolean(reqBody.isOpen,    false);
+  if (reqBody.autoAcceptOrders !== undefined) payload.autoAcceptOrders = normalizeBoolean(reqBody.autoAcceptOrders, false);
+  if (reqBody.notificationsEnabled !== undefined) payload.notificationsEnabled = normalizeBoolean(reqBody.notificationsEnabled, true);
+  if (reqBody.preparationMode !== undefined) payload.preparationMode = normalizeBoolean(reqBody.preparationMode, true);
   if (reqBody.isActive  !== undefined) payload.isActive   = normalizeBoolean(reqBody.isActive,  true);
   if (reqBody.latitude  !== undefined) payload.latitude   = normalizeNumber(reqBody.latitude,   NaN);
   if (reqBody.longitude !== undefined) payload.longitude  = normalizeNumber(reqBody.longitude,  NaN);
@@ -367,6 +370,9 @@ const buildUpdatePayload = async (reqBody = {}) => {
   if (reqBody.currency    !== undefined) payload.currency    = normalizeText(reqBody.currency, 'EUR').toUpperCase();
   if (reqBody.deliveryFee !== undefined) payload.deliveryFee = normalizeNumber(reqBody.deliveryFee, 0);
   if (reqBody.isOpen      !== undefined) payload.isOpen      = normalizeBoolean(reqBody.isOpen, false);
+  if (reqBody.autoAcceptOrders !== undefined) payload.autoAcceptOrders = normalizeBoolean(reqBody.autoAcceptOrders, false);
+  if (reqBody.notificationsEnabled !== undefined) payload.notificationsEnabled = normalizeBoolean(reqBody.notificationsEnabled, true);
+  if (reqBody.preparationMode !== undefined) payload.preparationMode = normalizeBoolean(reqBody.preparationMode, true);
   if (reqBody.isActive    !== undefined) payload.isActive    = normalizeBoolean(reqBody.isActive, true);
   if (reqBody.latitude    !== undefined) payload.latitude    = normalizeNumber(reqBody.latitude,  NaN);
   if (reqBody.longitude   !== undefined) payload.longitude   = normalizeNumber(reqBody.longitude, NaN);
