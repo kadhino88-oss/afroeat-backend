@@ -337,6 +337,21 @@ const restaurantSchema = new mongoose.Schema(
       index: true,
     },
 
+    autoAcceptOrders: {
+      type: Boolean,
+      default: false,
+    },
+
+    notificationsEnabled: {
+      type: Boolean,
+      default: true,
+    },
+
+    preparationMode: {
+      type: Boolean,
+      default: true,
+    },
+
     isFeatured: {
       type: Boolean,
       default: false,
