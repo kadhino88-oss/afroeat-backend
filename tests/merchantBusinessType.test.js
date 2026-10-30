@@ -47,7 +47,7 @@ test('restaurant catalog filters support the four merchant business types', () =
     path.join(__dirname, '..', 'controllers', 'restaurantController.js'),
     'utf8',
   );
-  assert.match(controller, /const businessType = normalizeText\(query\.businessType\)/);
-  assert.match(controller, /if \(businessType\) filters\.businessType = normalizeBusinessType\(businessType\)/);
-  assert.match(controller, /businessType: normalizeText\(req\.query\.businessType\)/);
+  assert.ok(controller.includes('const businessType = normalizeText(query.businessType)'));
+  assert.ok(controller.includes('if (businessType) filters.businessType = normalizeBusinessType(businessType)'));
+  assert.ok(controller.includes('businessType: normalizeText(req.query.businessType)'));
 });
