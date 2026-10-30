@@ -41,3 +41,13 @@ test('restaurant create and update controllers accept validated business type', 
   assert.match(controller, /payload\.businessType\s*=\s*normalizeBusinessType\(reqBody\.businessType\)/);
   assert.match(controller, /reqBody\.businessType\s*!==\s*undefined/);
 });
+
+test('restaurant catalog filters support the four merchant business types', () => {
+  const controller = fs.readFileSync(
+    path.join(__dirname, '..', 'controllers', 'restaurantController.js'),
+    'utf8',
+  );
+  assert.match(controller, /const businessType = normalizeText\(query\.businessType\)/);
+  assert.match(controller, /if \(businessType\) filters\.businessType = normalizeBusinessType\(businessType\)/);
+  assert.match(controller, /businessType: normalizeText\(req\.query\.businessType\)/);
+});
