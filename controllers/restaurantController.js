@@ -16,6 +16,16 @@ const normalizeText = (value, fallback = '') => {
   return normalized || fallback;
 };
 
+const ALLOWED_BUSINESS_TYPES = new Set(['restaurant', 'grocery', 'drinks', 'shop']);
+
+const normalizeBusinessType = (value, fallback = 'restaurant') => {
+  const normalized = normalizeText(value, fallback).toLowerCase();
+  if (!ALLOWED_BUSINESS_TYPES.has(normalized)) {
+    throw new Error('Type de commerce AFROEAT invalide.');
+  }
+  return normalized;
+};
+
 const normalizeNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -316,6 +326,7 @@ const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
 
   payload.owner       = owner._id;
   payload.name        = normalizeText(reqBody.name);
+  payload.businessType = normalizeBusinessType(reqBody.businessType);
   payload.cuisine     = normalizeText(reqBody.cuisine);
   payload.address     = normalizeText(reqBody.address);
   payload.city        = normalizeText(reqBody.city);
@@ -343,6 +354,7 @@ const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
 const buildUpdatePayload = async (reqBody = {}) => {
   const payload = {};
   if (reqBody.name        !== undefined) payload.name        = normalizeText(reqBody.name);
+  if (reqBody.businessType !== undefined) payload.businessType = normalizeBusinessType(reqBody.businessType);
   if (reqBody.cuisine     !== undefined) payload.cuisine     = normalizeText(reqBody.cuisine);
   if (reqBody.address     !== undefined) payload.address     = normalizeText(reqBody.address);
   if (reqBody.city        !== undefined) payload.city        = normalizeText(reqBody.city);
