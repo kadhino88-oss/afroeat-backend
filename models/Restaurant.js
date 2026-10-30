@@ -112,6 +112,18 @@ const restaurantSchema = new mongoose.Schema(
       index: true,
     },
 
+    // AFROEAT merchant type; default keeps existing records as restaurants.
+    businessType: {
+      type: String,
+      enum: {
+        values: ['restaurant', 'grocery', 'drinks', 'shop'],
+        message: 'Type de commerce AFROEAT invalide',
+      },
+      default: 'restaurant',
+      trim: true,
+      index: true,
+    },
+
     categories: {
       type: [String],
       default: [],
