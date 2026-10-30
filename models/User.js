@@ -90,6 +90,15 @@ const userSchema = new mongoose.Schema(
       match: [/^$|^[A-Z]{2}$/, 'Le code pays doit contenir deux lettres'],
     },
 
+    // Stripe Customer ID for reusable customer-level payment operations.
+    // This is separate from the connected account used for partner payouts.
+    stripeCustomerId: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [120, 'Identifiant client Stripe invalide'],
+    },
+
     stripeConnectAccountId: {
       type: String,
       default: '',
