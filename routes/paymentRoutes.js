@@ -57,6 +57,9 @@ router.post(
   selectCashPayment
 );
 
+// Backward-compatible alias used by the authoritative AfroeatApp source.
+router.post('/cash', protect, allowRoles('client'), selectCashPayment);
+
 router.get('/connect/return', connectReturnPage);
 router.get('/connect/refresh', refreshConnectOnboarding);
 router.get('/connect/status', protect, allowRoles('restaurant', 'livreur'), getConnectStatus);
