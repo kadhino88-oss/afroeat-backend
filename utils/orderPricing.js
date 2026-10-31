@@ -174,12 +174,20 @@ const calculateRestaurantPricing = ({ items, restaurant }) => {
     );
   }
 
+  const totalPrice = roundMoney(subtotal + deliveryFee);
+  if (!Number.isFinite(totalPrice) || totalPrice < 0) {
+    return resultError(
+      'INVALID_ORDER_PRICING',
+      'Le montant total de la commande est invalide.'
+    );
+  }
+
   return {
     ok: true,
     subtotal,
     deliveryFee,
     minimumOrderAmount,
-    totalPrice: roundMoney(subtotal + deliveryFee),
+    totalPrice,
     driverEarning: deliveryFee,
     currency,
   };

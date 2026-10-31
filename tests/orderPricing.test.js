@@ -91,3 +91,12 @@ test('rejects order below restaurant minimum and unsupported currency', () => {
     restaurant: { currency: 'ZZZ', deliveryFee: 0, minimumOrderAmount: 0 },
   }).code, 'UNSUPPORTED_CURRENCY');
 });
+
+test('rejects non-finite totals even when subtotal and delivery fee are individually finite', () => {
+  const pricing = calculateRestaurantPricing({
+    items: [{ price: 1e308, quantity: 1 }],
+    restaurant: { currency: 'EUR', deliveryFee: 1e308, minimumOrderAmount: 0 },
+  });
+  assert.equal(pricing.ok, false);
+  assert.equal(pricing.code, 'INVALID_ORDER_PRICING');
+});
