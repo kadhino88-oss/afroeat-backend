@@ -24,10 +24,23 @@ const {
   resolvePayoutReconciliation,
 } = require('../controllers/connectController');
 
+const {
+  listSavedCards,
+  createCardSetupIntent,
+  setDefaultSavedCard,
+  removeSavedCard,
+} = require('../controllers/savedCardController');
+
 const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
 
 router.get('/methods', protect, allowRoles('client', 'admin'), getAvailablePaymentMethods);
+
+// Cartes enregistrées du client (ajout par SetupIntent, jamais de numéro de carte ici).
+router.get('/cards', protect, allowRoles('client'), listSavedCards);
+router.post('/cards/setup-intent', protect, allowRoles('client'), createCardSetupIntent);
+router.patch('/cards/:paymentMethodId/default', protect, allowRoles('client'), setDefaultSavedCard);
+router.delete('/cards/:paymentMethodId', protect, allowRoles('client'), removeSavedCard);
 
 router.post(
   '/create-payment-intent',
