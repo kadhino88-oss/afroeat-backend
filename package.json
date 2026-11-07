@@ -8,7 +8,9 @@
     "dev": "nodemon server.js",
     "check:syntax": "node scripts/check-syntax.js",
     "test": "node --test",
-    "db:sync-indexes": "node scripts/sync-indexes.js"
+    "db:sync-indexes": "node scripts/sync-indexes.js",
+    "db:seed-demo-staging": "node seed/seedDemoStaging.js",
+    "vercel-build": "node scripts/sync-indexes.js --soft"
   },
   "keywords": [],
   "author": "",
