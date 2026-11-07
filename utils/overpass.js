@@ -92,7 +92,12 @@ const fetchOverpass = async (query) => {
   try {
     return await Promise.any(ENDPOINTS.map((url) => fetchOne(url, query)));
   } catch (error) {
-    throw error?.errors?.[0] || error;
+    const detail = (error?.errors || [error])
+      .map((e, i) => `${new URL(ENDPOINTS[i] || ENDPOINTS[0]).host}: ${e?.cause?.code || e?.name || ''} ${e?.message || ''}`.trim())
+      .join(' | ');
+    const failure = new Error(detail || 'Overpass indisponible');
+    failure.detail = detail;
+    throw failure;
   }
 };
 
