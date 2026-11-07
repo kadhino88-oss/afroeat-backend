@@ -36,7 +36,7 @@ const buildQuery = (kind, lat, lng, radiusKm) => {
       ? ['shop~"^(supermarket|convenience|greengrocer|general|grocery|deli)$"']
       : ['amenity~"^(restaurant|fast_food)$"'];
   const body = selectors
-    .flatMap((s) => [`node[${s}]${around};`, `way[${s}]${around};`])
+    .map((s) => `nwr[${s}]${around};`)
     .join('');
   return `[out:json][timeout:25];(${body});out center tags ${MAX_RESULTS * 4};`;
 };
@@ -72,27 +72,28 @@ const normalizeElement = (el, kind, lat, lng) => {
   };
 };
 
+const fetchOne = async (url, query) => {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': USER_AGENT,
+      Accept: 'application/json',
+    },
+    body: `data=${encodeURIComponent(query)}`,
+    signal: AbortSignal.timeout(24000),
+  });
+  if (!res.ok) throw new Error(`Overpass ${res.status}`);
+  return res.json();
+};
+
+// Tous les miroirs en parallèle : le premier qui répond gagne.
 const fetchOverpass = async (query) => {
-  let lastError;
-  for (const url of ENDPOINTS) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': USER_AGENT,
-          Accept: 'application/json',
-        },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(9000),
-      });
-      if (!res.ok) throw new Error(`Overpass ${res.status}`);
-      return await res.json();
-    } catch (error) {
-      lastError = error;
-    }
+  try {
+    return await Promise.any(ENDPOINTS.map((url) => fetchOne(url, query)));
+  } catch (error) {
+    throw error?.errors?.[0] || error;
   }
-  throw lastError || new Error('Overpass indisponible');
 };
 
 const findPlaces = async ({ kind, lat, lng, radiusKm }) => {
