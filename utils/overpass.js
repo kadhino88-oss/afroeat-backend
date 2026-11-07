@@ -3,8 +3,10 @@
 // Découverte de lieux réels via OpenStreetMap (Overpass API).
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ];
+const USER_AGENT = 'AfroEat/1.0 (https://github.com/kadhino88-oss/afroeat-backend)';
 const MAX_RADIUS_KM = 100;
 const MAX_RESULTS = 500;
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -36,7 +38,7 @@ const buildQuery = (kind, lat, lng, radiusKm) => {
   const body = selectors
     .flatMap((s) => [`node[${s}]${around};`, `way[${s}]${around};`])
     .join('');
-  return `[out:json][timeout:20];(${body});out center tags ${MAX_RESULTS * 4};`;
+  return `[out:json][timeout:25];(${body});out center tags ${MAX_RESULTS * 4};`;
 };
 
 const normalizeElement = (el, kind, lat, lng) => {
@@ -76,9 +78,13 @@ const fetchOverpass = async (query) => {
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': USER_AGENT,
+          Accept: 'application/json',
+        },
         body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(22000),
+        signal: AbortSignal.timeout(9000),
       });
       if (!res.ok) throw new Error(`Overpass ${res.status}`);
       return await res.json();
@@ -94,7 +100,13 @@ const findPlaces = async ({ kind, lat, lng, radiusKm }) => {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.items;
 
-  const data = await fetchOverpass(buildQuery(kind, lat, lng, radiusKm));
+  let data;
+  try {
+    data = await fetchOverpass(buildQuery(kind, lat, lng, radiusKm));
+  } catch (error) {
+    if (hit) return hit.items; // dernière réponse connue plutôt qu'une erreur
+    throw error;
+  }
   const seen = new Set();
   const items = (Array.isArray(data?.elements) ? data.elements : [])
     .map((el) => normalizeElement(el, kind, lat, lng))
