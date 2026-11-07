@@ -1,6 +1,18 @@
 'use strict';
 
 const { findPlaces, clampRadiusKm } = require('../utils/overpass');
+const { findStoredPlaces } = require('../utils/placeSearch');
+
+// 1) notre base (OpenStreetMap importé) ; 2) à défaut, Overpass en direct.
+const loadItems = async (params) => {
+  try {
+    const stored = await findStoredPlaces(params);
+    if (stored.length > 0) return stored;
+  } catch (error) {
+    console.error('Places stockés indisponibles :', error.message);
+  }
+  return findPlaces(params);
+};
 
 const parseCoords = (query) => {
   const lat = Number(query.lat);
@@ -18,7 +30,7 @@ const handler = (kind) => async (req, res) => {
   }
   const radiusKm = clampRadiusKm(req.query.radius ?? req.query.maxDistance);
   try {
-    const items = await findPlaces({ kind, ...coords, radiusKm });
+    const items = await loadItems({ kind, ...coords, radiusKm });
     res.set('Cache-Control', 'public, max-age=300');
     if (kind === 'groceries') {
       return res.json({ success: true, radiusKm, count: items.length, groceries: items });

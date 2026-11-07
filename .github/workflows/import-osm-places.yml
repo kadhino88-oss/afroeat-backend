@@ -1,0 +1,60 @@
+name: Importer les lieux OpenStreetMap
+
+# Bouton manuel (onglet « Actions » → « Run workflow »), utilisable depuis un téléphone.
+# Télécharge une région sur Geofabrik, en extrait restaurants / fast-foods / épiceries
+# et les enregistre dans la base MongoDB utilisée par l'API (secret PLACES_MONGO_URI).
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: "Région Geofabrik (ex. europe/switzerland, europe/france, africa/senegal)"
+        type: string
+        default: europe/switzerland
+
+permissions:
+  contents: read
+
+jobs:
+  import-osm-places:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Vérifier le secret
+        env:
+          PLACES_MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
+        run: |
+          if [ -z "$PLACES_MONGO_URI" ]; then
+            echo "::error::Le secret PLACES_MONGO_URI est absent (même adresse MongoDB que MONGO_URI sur Vercel)."
+            exit 1
+          fi
+      - name: Installer osmium
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+      - name: Télécharger la région
+        env:
+          REGION: ${{ inputs.region }}
+        run: |
+          case "$REGION" in
+            *[!a-z0-9/_-]*|"") echo "::error::Région invalide"; exit 1 ;;
+          esac
+          curl -fsSL -o region.osm.pbf "https://download.geofabrik.de/${REGION}-latest.osm.pbf"
+      - name: Extraire les lieux
+        run: |
+          osmium tags-filter region.osm.pbf \
+            nwr/amenity=restaurant,fast_food \
+            nwr/shop=supermarket,convenience,greengrocer,general,grocery,deli \
+            -o places.osm.pbf
+          osmium export places.osm.pbf -f geojsonseq --geometry-types=point,polygon -o places.geojsonseq
+      - name: Importer dans MongoDB
+        env:
+          MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
+          REGION: ${{ inputs.region }}
+        run: node scripts/import-osm-places.js places.geojsonseq "$REGION"
