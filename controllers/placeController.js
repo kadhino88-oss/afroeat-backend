@@ -34,7 +34,7 @@ const handler = (kind) => async (req, res) => {
     });
   } catch (error) {
     console.error('Places nearby error:', error.message);
-    return res.status(502).json({ success: false, message: 'Service de lieux temporairement indisponible.' });
+    return res.status(502).json({ success: false, message: 'Service de lieux temporairement indisponible.', detail: error.detail || error.message });
   }
 };
 

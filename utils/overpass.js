@@ -3,8 +3,10 @@
 // Découverte de lieux réels via OpenStreetMap (Overpass API).
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ];
+const USER_AGENT = 'AfroEat/1.0 (https://github.com/kadhino88-oss/afroeat-backend)';
 const MAX_RADIUS_KM = 100;
 const MAX_RESULTS = 500;
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -34,9 +36,9 @@ const buildQuery = (kind, lat, lng, radiusKm) => {
       ? ['shop~"^(supermarket|convenience|greengrocer|general|grocery|deli)$"']
       : ['amenity~"^(restaurant|fast_food)$"'];
   const body = selectors
-    .flatMap((s) => [`node[${s}]${around};`, `way[${s}]${around};`])
+    .map((s) => `nwr[${s}]${around};`)
     .join('');
-  return `[out:json][timeout:20];(${body});out center tags ${MAX_RESULTS * 4};`;
+  return `[out:json][timeout:25];(${body});out center tags ${MAX_RESULTS * 4};`;
 };
 
 const normalizeElement = (el, kind, lat, lng) => {
@@ -70,23 +72,33 @@ const normalizeElement = (el, kind, lat, lng) => {
   };
 };
 
+const fetchOne = async (url, query) => {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': USER_AGENT,
+      Accept: 'application/json',
+    },
+    body: `data=${encodeURIComponent(query)}`,
+    signal: AbortSignal.timeout(24000),
+  });
+  if (!res.ok) throw new Error(`Overpass ${res.status}`);
+  return res.json();
+};
+
+// Tous les miroirs en parallèle : le premier qui répond gagne.
 const fetchOverpass = async (query) => {
-  let lastError;
-  for (const url of ENDPOINTS) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(22000),
-      });
-      if (!res.ok) throw new Error(`Overpass ${res.status}`);
-      return await res.json();
-    } catch (error) {
-      lastError = error;
-    }
+  try {
+    return await Promise.any(ENDPOINTS.map((url) => fetchOne(url, query)));
+  } catch (error) {
+    const detail = (error?.errors || [error])
+      .map((e, i) => `${new URL(ENDPOINTS[i] || ENDPOINTS[0]).host}: ${e?.cause?.code || e?.name || ''} ${e?.message || ''}`.trim())
+      .join(' | ');
+    const failure = new Error(detail || 'Overpass indisponible');
+    failure.detail = detail;
+    throw failure;
   }
-  throw lastError || new Error('Overpass indisponible');
 };
 
 const findPlaces = async ({ kind, lat, lng, radiusKm }) => {
@@ -94,7 +106,13 @@ const findPlaces = async ({ kind, lat, lng, radiusKm }) => {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.items;
 
-  const data = await fetchOverpass(buildQuery(kind, lat, lng, radiusKm));
+  let data;
+  try {
+    data = await fetchOverpass(buildQuery(kind, lat, lng, radiusKm));
+  } catch (error) {
+    if (hit) return hit.items; // dernière réponse connue plutôt qu'une erreur
+    throw error;
+  }
   const seen = new Set();
   const items = (Array.isArray(data?.elements) ? data.elements : [])
     .map((el) => normalizeElement(el, kind, lat, lng))
