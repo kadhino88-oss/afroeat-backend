@@ -1,0 +1,53 @@
+name: Base de test (index et données de démonstration)
+
+# Bouton manuel (onglet « Actions » → « Run workflow »), utilisable depuis un téléphone.
+# Ne cible QUE la base de test : le secret STAGING_MONGO_URI doit pointer vers une base
+# dont le nom se termine par « _staging » (le script de démonstration refuse toute autre base).
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action à lancer sur la base de TEST"
+        type: choice
+        default: sync-indexes
+        options:
+          - sync-indexes
+          - seed-demo
+          - remove-demo
+
+permissions:
+  contents: read
+
+jobs:
+  staging-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Vérifier que le secret existe
+        env:
+          STAGING_MONGO_URI: ${{ secrets.STAGING_MONGO_URI }}
+        run: |
+          if [ -z "$STAGING_MONGO_URI" ]; then
+            echo "::error::Le secret STAGING_MONGO_URI est absent (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+      - name: Lancer l'action demandée
+        env:
+          MONGO_URI: ${{ secrets.STAGING_MONGO_URI }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          case "$ACTION" in
+            sync-indexes) node scripts/sync-indexes.js ;;
+            seed-demo)    node seed/seedDemoStaging.js ;;
+            remove-demo)  node seed/seedDemoStaging.js --remove ;;
+            *) echo "::error::Action inconnue : $ACTION"; exit 1 ;;
+          esac
