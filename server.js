@@ -466,7 +466,14 @@ const startServer = async () => {
   }
 };
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+// Exporte l'application pour les environnements serverless (Vercel) et les tests.
+// Le serveur HTTP + la connexion MongoDB ne démarrent que lorsque le fichier est
+// lancé directement (`node server.js`).
+module.exports = app;
 
-startServer();
+if (require.main === module) {
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+  startServer();
+}
