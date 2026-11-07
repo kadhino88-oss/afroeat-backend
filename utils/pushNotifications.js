@@ -1,5 +1,3 @@
-const { Expo } = require('expo-server-sdk');
-
 const User = require('../models/User');
 
 /**
@@ -15,7 +13,23 @@ const User = require('../models/User');
  *   valide avant d'essayer de l'utiliser.
  */
 
-const expo = new Expo();
+// expo-server-sdk est un paquet ESM uniquement : on le charge dynamiquement
+// (et une seule fois) pour rester compatible avec ce code CommonJS, y compris
+// dans les environnements serverless où `require()` d'un module ESM échoue.
+let expoLoader = null;
+
+const getExpo = () => {
+  if (!expoLoader) {
+    expoLoader = import('expo-server-sdk')
+      .then(({ Expo }) => ({ Expo, client: new Expo() }))
+      .catch((error) => {
+        expoLoader = null; // permet une nouvelle tentative au prochain appel
+        throw error;
+      });
+  }
+
+  return expoLoader;
+};
 
 /**
  * @param {string|import('mongoose').Types.ObjectId} userId
@@ -30,7 +44,13 @@ const sendPushToUser = async (userId, { title, body, data = {} } = {}) => {
     const user = await User.findById(userId).select('pushToken');
     const token = user?.pushToken;
 
-    if (!token || !Expo.isExpoPushToken(token)) {
+    if (!token) {
+      return;
+    }
+
+    const { Expo, client: expo } = await getExpo();
+
+    if (!Expo.isExpoPushToken(token)) {
       return;
     }
 
