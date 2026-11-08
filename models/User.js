@@ -282,7 +282,7 @@ userSchema.index({ createdAt: -1 });
 userSchema.index({ isAvailable: 1, role: 1 });
 userSchema.index({ isIdentityVerified: 1, isWorkAuthorized: 1 });
 
-userSchema.pre('validate', function (next) {
+userSchema.pre('validate', function () {
   try {
     this.name = normalizeString(this.name);
     this.email = normalizeEmail(this.email);
@@ -292,25 +292,23 @@ userSchema.pre('validate', function (next) {
     this.verificationNotes = normalizeString(this.verificationNotes);
 
     if (!this.name) {
-      return next(new Error('Le nom est obligatoire'));
+      throw new Error('Le nom est obligatoire');
     }
 
     if (!this.email) {
-      return next(new Error('L’email est obligatoire'));
+      throw new Error('L’email est obligatoire');
     }
 
     if (!ALLOWED_ROLES.includes(this.role)) {
-      return next(new Error('Rôle invalide'));
+      throw new Error('Rôle invalide');
     }
 
     if (!ALLOWED_ACCOUNT_STATUSES.includes(this.accountStatus)) {
-      return next(new Error('Statut de compte invalide'));
+      throw new Error('Statut de compte invalide');
     }
 
     if (this.isModified('password') && !isStrongEnoughPassword(this.password)) {
-      return next(
-        new Error('Le mot de passe doit contenir au moins 6 caractères')
-      );
+      throw new Error('Le mot de passe doit contenir au moins 6 caractères');
     }
 
     if (this.role !== 'livreur') {
@@ -327,13 +325,13 @@ userSchema.pre('validate', function (next) {
       this.adminProfile.lastAdminActionAt = null;
     }
 
-    return next();
+    return;
   } catch (error) {
-    return next(error);
+    throw error;
   }
 });
 
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   try {
     if (this.isModified('password')) {
       const salt = await bcrypt.genSalt(12);
@@ -386,9 +384,9 @@ userSchema.pre('save', async function (next) {
       );
     }
 
-    return next();
+    return;
   } catch (error) {
-    return next(error);
+    throw error;
   }
 });
 
