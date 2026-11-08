@@ -54,7 +54,7 @@ const main = async () => {
   await flush();
 
   // Supprime les lieux de cette région qui n'existent plus dans OpenStreetMap.
-  const removed = region
+  const removed = region && kept > 0
     ? await Place.deleteMany({ region, importedAt: { $lt: startedAt } })
     : { deletedCount: 0 };
 
