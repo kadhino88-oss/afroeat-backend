@@ -116,7 +116,7 @@ adminAuditLogSchema.index({ targetId: 1, createdAt: -1 });
 adminAuditLogSchema.index({ admin: 1, action: 1, createdAt: -1 });
 adminAuditLogSchema.index({ targetType: 1, action: 1, createdAt: -1 });
 
-adminAuditLogSchema.pre('validate', function (next) {
+adminAuditLogSchema.pre('validate', function () {
   try {
     this.action = normalizeTrim(this.action);
     this.targetType = normalizeTrim(this.targetType);
@@ -128,16 +128,16 @@ adminAuditLogSchema.pre('validate', function (next) {
     this.metadata = sanitizeMetadata(this.metadata);
 
     if (!this.action) {
-      return next(new Error('L’action admin est obligatoire.'));
+      throw new Error('L’action admin est obligatoire.');
     }
 
     if (!this.targetType) {
-      return next(new Error('Le type de cible est obligatoire.'));
+      throw new Error('Le type de cible est obligatoire.');
     }
 
-    return next();
+    return;
   } catch (error) {
-    return next(error);
+    throw error;
   }
 });
 

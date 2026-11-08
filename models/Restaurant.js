@@ -407,7 +407,7 @@ restaurantSchema.index({ name: 1 });
 restaurantSchema.index({ cuisine: 1, city: 1, country: 1 });
 restaurantSchema.index({ isActive: 1, isOpen: 1, createdAt: -1 });
 
-restaurantSchema.pre('validate', function (next) {
+restaurantSchema.pre('validate', function () {
   try {
     this.name = normalizeString(this.name);
     this.description = normalizeString(this.description);
@@ -423,19 +423,19 @@ restaurantSchema.pre('validate', function (next) {
     this.currency = normalizeString(this.currency || 'EUR').toUpperCase();
 
     if (!this.owner) {
-      return next(new Error('Le propriétaire du restaurant est obligatoire'));
+      throw new Error('Le propriétaire du restaurant est obligatoire');
     }
 
     if (!this.name) {
-      return next(new Error('Le nom du restaurant est obligatoire'));
+      throw new Error('Le nom du restaurant est obligatoire');
     }
 
     if (!this.address) {
-      return next(new Error('L’adresse du restaurant est obligatoire'));
+      throw new Error('L’adresse du restaurant est obligatoire');
     }
 
     if (!allowedCurrencies.includes(this.currency)) {
-      return next(new Error('Devise non prise en charge'));
+      throw new Error('Devise non prise en charge');
     }
 
     if (
@@ -443,7 +443,7 @@ restaurantSchema.pre('validate', function (next) {
       this.latitude !== undefined &&
       !isValidLatitude(this.latitude)
     ) {
-      return next(new Error('Latitude invalide'));
+      throw new Error('Latitude invalide');
     }
 
     if (
@@ -451,7 +451,7 @@ restaurantSchema.pre('validate', function (next) {
       this.longitude !== undefined &&
       !isValidLongitude(this.longitude)
     ) {
-      return next(new Error('Longitude invalide'));
+      throw new Error('Longitude invalide');
     }
 
     if (this.location) {
@@ -460,7 +460,7 @@ restaurantSchema.pre('validate', function (next) {
         this.location.latitude !== undefined &&
         !isValidLatitude(this.location.latitude)
       ) {
-        return next(new Error('Latitude de géolocalisation invalide'));
+        throw new Error('Latitude de géolocalisation invalide');
       }
 
       if (
@@ -468,7 +468,7 @@ restaurantSchema.pre('validate', function (next) {
         this.location.longitude !== undefined &&
         !isValidLongitude(this.location.longitude)
       ) {
-        return next(new Error('Longitude de géolocalisation invalide'));
+        throw new Error('Longitude de géolocalisation invalide');
       }
     }
 
@@ -482,13 +482,13 @@ restaurantSchema.pre('validate', function (next) {
       this.categories = [];
     }
 
-    return next();
+    return;
   } catch (error) {
-    return next(error);
+    throw error;
   }
 });
 
-restaurantSchema.pre('save', function (next) {
+restaurantSchema.pre('save', function () {
   try {
     this.deliveryFee = Number(normalizeNumber(this.deliveryFee, 0).toFixed(2));
     this.minimumOrderAmount = Number(
@@ -572,9 +572,9 @@ restaurantSchema.pre('save', function (next) {
       }
     }
 
-    return next();
+    return;
   } catch (error) {
-    return next(error);
+    throw error;
   }
 });
 
