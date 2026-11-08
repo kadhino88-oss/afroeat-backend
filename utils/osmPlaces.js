@@ -1,7 +1,20 @@
 'use strict';
 
-const AFRICAN_RE =
-  /afri|s[ée]n[ée]gal|ivoir|camerou|congo|nigeria|ghana|malien|mali\b|guin[ée]|togo|b[ée]nin|ethiop|[ée]rythr|maroc|moroc|alg[ée]r|tunis|egypt|[ée]gypt|somali|kenya|tchad|gabon|burkina|madagas|maur|exotic|tropic|antill|cara[iï]b/i;
+// Un lieu est « africain » si son nom, sa cuisine, sa marque ou sa description évoque l'Afrique
+// (pays, nationalités, plats typiques, boutiques « exotic / afro »).
+const AFRICAN_RE = new RegExp(
+  [
+    'afri', 'afro(?!d)', 'exotic', 'tropic', 'antill', 'cara[iï]b',
+    's[ée]n[ée]gal', 'ivoir', "cote d'?ivoire", 'c[oô]te d.?ivoire', 'camerou', 'congo', 'nigeria', 'ghana',
+    'mali\\b', 'malien', 'guin[ée]', 'togo', 'b[ée]nin', 'burkina', 'gabon', 'tchad', 'niger\\b',
+    'ethiop', '[ée]rythr', 'somali', 'kenya', 'ugand', 'tanzan', 'rwanda', 'burundi', 'angola',
+    'mozambi', 'zambi', 'zimbab', 'madagas', 'mauritan', 'mauritius', 'sierra leone', 'liberia', 'gambia', 'gambie', 'cap.?vert', 'cabo verde',
+    'maroc', 'moroc', 'alg[ée]r', 'tunis', 'egypt', '[ée]gypt', 'liby', 'sudan', 'comor',
+    'yassa', 'maf[ée]', 'thi[eé]b', 'attieke', 'attiék', 'alloco', 'kedjenou', 'ndol[ée]', 'foufou', 'fufu', 'foutou',
+    'injera', 'suya', 'jollof', 'couscous', 'tajine', 'tagine', 'bissap', 'gnamakoudji', 'kandia',
+  ].join('|'),
+  'i'
+);
 
 const GROCERY_SHOPS = new Set(['supermarket', 'convenience', 'greengrocer', 'general', 'grocery', 'deli']);
 

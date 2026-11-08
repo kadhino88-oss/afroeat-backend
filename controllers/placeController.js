@@ -32,8 +32,8 @@ const handler = (kind) => async (req, res) => {
   }
   const radiusKm = clampRadiusKm(req.query.radius ?? req.query.maxDistance);
   try {
-    // Épiceries : uniquement africaines par défaut (?all=1 pour toutes les épiceries).
-    const africanOnly = kind === 'groceries' && req.query.all !== '1';
+    // AFROEAT ne référence que des commerces africains (?all=1 désactive le filtre, pour les tests).
+    const africanOnly = req.query.all !== '1';
     const { items, total } = await loadItems({ kind, ...coords, radiusKm, limit: req.query.limit, africanOnly });
     res.set('Cache-Control', 'public, max-age=300');
     if (kind === 'groceries') {

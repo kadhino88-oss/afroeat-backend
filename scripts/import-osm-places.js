@@ -10,7 +10,8 @@ const Place = require('../models/Place');
 const { featureToPlace } = require('../utils/osmPlaces');
 
 const BATCH = 1000;
-const AFRICAN_ONLY = String(process.env.AFRICAN_ONLY || '').toLowerCase() === 'true';
+// Par défaut, seuls les commerces africains sont enregistrés (AFRICAN_ONLY=false pour tout garder).
+const AFRICAN_ONLY = String(process.env.AFRICAN_ONLY || 'true').toLowerCase() !== 'false';
 // Protège la base : un cluster gratuit Atlas (M0) est limité à 512 Mo.
 const MAX_DB_MB = Number(process.env.MAX_DB_MB || 400);
 
