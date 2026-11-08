@@ -1,15 +1,19 @@
 name: Importer les lieux OpenStreetMap
 
 # Bouton manuel (onglet « Actions » → « Run workflow »), utilisable depuis un téléphone.
-# Télécharge une région sur Geofabrik, en extrait restaurants / fast-foods / épiceries
+# Pour chaque région : télécharge Geofabrik, extrait restaurants / fast-foods / épiceries
 # et les enregistre dans la base MongoDB utilisée par l'API (secret PLACES_MONGO_URI).
 on:
   workflow_dispatch:
     inputs:
-      region:
-        description: "Région Geofabrik (ex. europe/switzerland, europe/france, africa/senegal)"
+      regions:
+        description: "Régions Geofabrik séparées par des virgules, ex. europe/switzerland,europe/france/rhone-alpes (éviter les continents entiers)"
         type: string
         default: europe/switzerland
+      african_only:
+        description: "Ne garder que les lieux repérés comme africains (recommandé hors zone de lancement)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,7 +21,7 @@ permissions:
 jobs:
   import-osm-places:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -38,23 +42,31 @@ jobs:
           fi
       - name: Installer osmium
         run: sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
-      - name: Télécharger la région
-        env:
-          REGION: ${{ inputs.region }}
-        run: |
-          case "$REGION" in
-            *[!a-z0-9/_-]*|"") echo "::error::Région invalide"; exit 1 ;;
-          esac
-          curl -fsSL -o region.osm.pbf "https://download.geofabrik.de/${REGION}-latest.osm.pbf"
-      - name: Extraire les lieux
-        run: |
-          osmium tags-filter region.osm.pbf \
-            nwr/amenity=restaurant,fast_food \
-            nwr/shop=supermarket,convenience,greengrocer,general,grocery,deli \
-            -o places.osm.pbf
-          osmium export places.osm.pbf -f geojsonseq --add-unique-id=type_id --geometry-types=point,polygon -o places.geojsonseq
-      - name: Importer dans MongoDB
+      - name: Importer les régions
         env:
           MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
-          REGION: ${{ inputs.region }}
-        run: node scripts/import-osm-places.js places.geojsonseq "$REGION"
+          REGIONS: ${{ inputs.regions }}
+          AFRICAN_ONLY: ${{ inputs.african_only }}
+        run: |
+          set -e
+          LIST=$(echo "$REGIONS" | tr ',' ' ')
+          COUNT=$(echo $LIST | wc -w)
+          if [ "$COUNT" -eq 0 ] || [ "$COUNT" -gt 6 ]; then
+            echo "::error::Indique entre 1 et 6 régions séparées par des virgules."
+            exit 1
+          fi
+          for REGION in $LIST; do
+            case "$REGION" in
+              *[!a-z0-9/_-]*|"") echo "::error::Région invalide : $REGION (exemple : europe/france/rhone-alpes)"; exit 1 ;;
+            esac
+            echo "=== $REGION ==="
+            curl -fsSL -o region.osm.pbf "https://download.geofabrik.de/${REGION}-latest.osm.pbf" \
+              || { echo "::error::Région introuvable chez Geofabrik : $REGION (liste : https://download.geofabrik.de)"; exit 1; }
+            osmium tags-filter region.osm.pbf \
+              nwr/amenity=restaurant,fast_food \
+              nwr/shop=supermarket,convenience,greengrocer,general,grocery,deli \
+              -o places.osm.pbf
+            osmium export places.osm.pbf -f geojsonseq --add-unique-id=type_id --geometry-types=point,polygon -o places.geojsonseq
+            node scripts/import-osm-places.js places.geojsonseq "$REGION"
+            rm -f region.osm.pbf places.osm.pbf places.geojsonseq
+          done
