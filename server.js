@@ -293,6 +293,7 @@ app.get('/health', (req, res) => {
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/restaurants', require('./routes/restaurantRoutes'));
 app.use('/api/places', require('./routes/placeRoutes'));
+app.use('/api/partner-applications', require('./routes/partnerApplicationRoutes'));
 app.use('/api/menu', require('./routes/menuRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/delivery', require('./routes/deliveryRoutes'));

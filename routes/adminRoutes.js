@@ -16,6 +16,11 @@ const {
   getAdminOrderById,
 } = require('../controllers/adminController');
 
+const {
+  listApplications,
+  updateApplication,
+} = require('../controllers/partnerApplicationController');
+
 const adminAuditRoutes = require('./adminAuditRoutes');
 const adminOpsRoutes = require('./adminOpsRoutes');
 
@@ -74,6 +79,12 @@ router.get('/users', getAdminUsers);
 router.get('/users/:id', getAdminUserById);
 router.put('/users/:id/status', updateAdminUserStatus);
 router.put('/users/:id/verification', updateAdminUserVerification);
+
+/**
+ * Demandes d'inscription de commerces
+ */
+router.get('/partner-applications', listApplications);
+router.put('/partner-applications/:id', updateApplication);
 
 /**
  * Restaurants
