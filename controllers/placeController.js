@@ -7,11 +7,12 @@ const { findStoredPlaces } = require('../utils/placeSearch');
 const loadItems = async (params) => {
   try {
     const stored = await findStoredPlaces(params);
-    if (stored.length > 0) return stored;
+    if (stored.items.length > 0) return stored;
   } catch (error) {
     console.error('Places stockés indisponibles :', error.message);
   }
-  return findPlaces(params);
+  const items = await findPlaces(params);
+  return { items, total: items.length };
 };
 
 const parseCoords = (query) => {
@@ -30,10 +31,12 @@ const handler = (kind) => async (req, res) => {
   }
   const radiusKm = clampRadiusKm(req.query.radius ?? req.query.maxDistance);
   try {
-    const items = await loadItems({ kind, ...coords, radiusKm });
+    const { items, total } = await loadItems({ kind, ...coords, radiusKm, limit: req.query.limit });
     res.set('Cache-Control', 'public, max-age=300');
     if (kind === 'groceries') {
-      return res.json({ success: true, radiusKm, count: items.length, groceries: items });
+      return res.json({ success: true, radiusKm, count: items.length,
+        total,
+        hasMore: total > items.length, groceries: items });
     }
     const restaurants = items.filter((p) => p.category === 'restaurant');
     const fastFoods = items.filter((p) => p.category === 'fast-food');
@@ -41,6 +44,8 @@ const handler = (kind) => async (req, res) => {
       success: true,
       radiusKm,
       count: items.length,
+        total,
+        hasMore: total > items.length,
       restaurants,
       fastFoods,
     });
