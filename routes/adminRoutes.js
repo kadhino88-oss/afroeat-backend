@@ -16,6 +16,11 @@ const {
   getAdminOrderById,
 } = require('../controllers/adminController');
 
+const {
+  listApplications,
+  updateApplication,
+} = require('../controllers/partnerApplicationController');
+
 const adminAuditRoutes = require('./adminAuditRoutes');
 const adminOpsRoutes = require('./adminOpsRoutes');
 
