@@ -10,6 +10,9 @@ const Place = require('../models/Place');
 const { featureToPlace } = require('../utils/osmPlaces');
 
 const BATCH = 1000;
+const AFRICAN_ONLY = String(process.env.AFRICAN_ONLY || '').toLowerCase() === 'true';
+// Protège la base : un cluster gratuit Atlas (M0) est limité à 512 Mo.
+const MAX_DB_MB = Number(process.env.MAX_DB_MB || 400);
 
 const main = async () => {
   const [file, region = ''] = process.argv.slice(2);
@@ -20,6 +23,16 @@ const main = async () => {
 
   await mongoose.connect(process.env.MONGO_URI);
   await Place.init();
+
+  const stats = await mongoose.connection.db.command({ dbStats: 1, scale: 1024 * 1024 });
+  const usedMb = Number(stats.dataSize || 0) + Number(stats.indexSize || 0);
+  if (usedMb > MAX_DB_MB) {
+    console.error(
+      `Import annulé : la base utilise déjà ${Math.round(usedMb)} Mo (limite de sécurité ${MAX_DB_MB} Mo). ` +
+      'Utilise « african_only », une région plus petite, ou passe à un cluster plus grand.'
+    );
+    process.exit(1);
+  }
   const startedAt = new Date();
 
   const lines = readline.createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity });
@@ -41,6 +54,7 @@ const main = async () => {
     try { feature = JSON.parse(line); } catch { continue; }
     const doc = featureToPlace(feature, region);
     if (!doc) continue;
+    if (AFRICAN_ONLY && !doc.isAfrican) continue;
     kept += 1;
     ops.push({
       updateOne: {
@@ -58,7 +72,7 @@ const main = async () => {
     ? await Place.deleteMany({ region, importedAt: { $lt: startedAt } })
     : { deletedCount: 0 };
 
-  console.log(`OSM ${region || '(sans région)'} : ${seen} éléments lus, ${kept} lieux importés, ${removed.deletedCount} supprimés.`);
+  console.log(`OSM ${region || '(sans région)'} : ${seen} éléments lus, ${kept} lieux importés${AFRICAN_ONLY ? ' (africains uniquement)' : ''}, ${removed.deletedCount} supprimés.`);
   await mongoose.disconnect();
 };
 

@@ -64,3 +64,15 @@ test('boutiques exotiques repérées comme africaines', () => {
   const p = featureToPlace({ id: 'n5', properties: { shop: 'convenience', name: 'Exotic Food Market' }, geometry: { type: 'Point', coordinates: [6, 46] } });
   assert.equal(p.isAfrican, true);
 });
+
+test('le workflow d\'import accepte plusieurs régions et protège la base', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'import-osm-places.yml'), 'utf8');
+  const script = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'import-osm-places.js'), 'utf8');
+  assert.match(wf, /regions:/);
+  assert.match(wf, /african_only:/);
+  assert.match(wf, /for REGION in \$LIST/);
+  assert.match(script, /MAX_DB_MB/);
+  assert.match(script, /AFRICAN_ONLY && !doc\.isAfrican/);
+});
