@@ -238,27 +238,31 @@ const validateRegistrationPayload = (body) => {
     throw new Error('Le pays est obligatoire.');
   }
 
-  if (!nationality) {
+  // Client : seuls nom, e-mail, mot de passe, téléphone, adresse et pays sont demandés à l'inscription.
+  // Partenaires (restaurant, livreur) : vérification d'identité complète.
+  const requiresIdentity = role !== 'client';
+
+  if (requiresIdentity && !nationality) {
     throw new Error('La nationalité est obligatoire.');
   }
 
-  if (!birthDate) {
+  if (requiresIdentity && !birthDate) {
     throw new Error('La date de naissance est obligatoire.');
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+  if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
     throw new Error('La date de naissance doit être au format AAAA-MM-JJ.');
   }
 
-  if (!isAdultFromBirthDate(birthDate)) {
+  if (birthDate && !isAdultFromBirthDate(birthDate)) {
     throw new Error('Vous devez être majeur pour créer ce compte.');
   }
 
-  if (!identityDocument || typeof identityDocument !== 'object') {
+  if (requiresIdentity && (!identityDocument || typeof identityDocument !== 'object')) {
     throw new Error("Une pièce d'identité est obligatoire.");
   }
 
-  if (!normalizeString(identityDocument?.number)) {
+  if (requiresIdentity && !normalizeString(identityDocument?.number)) {
     throw new Error("Le numéro de pièce d'identité est obligatoire.");
   }
 
@@ -296,10 +300,13 @@ const validateRegistrationPayload = (body) => {
     country,
     nationality,
     birthDate,
-    identityDocument: {
-      type: normalizeString(identityDocument?.type) || 'identity_card',
-      number: normalizeString(identityDocument?.number),
-    },
+    identityDocument:
+      identityDocument && typeof identityDocument === 'object'
+        ? {
+            type: normalizeString(identityDocument?.type) || 'identity_card',
+            number: normalizeString(identityDocument?.number),
+          }
+        : null,
     workAuthorization:
       workAuthorization && typeof workAuthorization === 'object'
         ? {
@@ -618,6 +625,7 @@ const getDrivers = async (req, res) => {
 
 module.exports = {
   registerUser,
+  validateRegistrationPayload,
   loginUser,
   getMe,
   updateMe,
