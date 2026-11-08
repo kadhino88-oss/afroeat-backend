@@ -33,7 +33,7 @@ const featureToPlace = (feature, region = '') => {
   const point = centroid(feature.geometry);
   if (!point || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null;
 
-  const idRaw = String(feature.id || '');
+  const idRaw = String(feature.id || tags['@id'] || '');
   if (!idRaw) return null;
 
   const street = [tags['addr:housenumber'], tags['addr:street']].filter(Boolean).join(' ');

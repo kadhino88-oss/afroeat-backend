@@ -52,7 +52,7 @@ jobs:
             nwr/amenity=restaurant,fast_food \
             nwr/shop=supermarket,convenience,greengrocer,general,grocery,deli \
             -o places.osm.pbf
-          osmium export places.osm.pbf -f geojsonseq --geometry-types=point,polygon -o places.geojsonseq
+          osmium export places.osm.pbf -f geojsonseq --add-unique-id=type_id --geometry-types=point,polygon -o places.geojsonseq
       - name: Importer dans MongoDB
         env:
           MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
