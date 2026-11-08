@@ -1,7 +1,8 @@
 'use strict';
 
 const Place = require('../models/Place');
-const { MAX_RESULTS } = require('./overpass');
+const DEFAULT_LIMIT = 1000;
+const MAX_LIMIT = 3000;
 
 const toApi = (doc) => {
   const [lng, lat] = doc.location.coordinates;
@@ -27,9 +28,18 @@ const toApi = (doc) => {
 };
 
 // Recherche dans les lieux OpenStreetMap importés dans notre base (index géospatial).
-const findStoredPlaces = async ({ kind, lat, lng, radiusKm }) => {
+const clampLimit = (value) => {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_LIMIT;
+  return Math.min(n, MAX_LIMIT);
+};
+
+// Renvoie { items, total } : total = nombre réel de lieux dans le rayon (même au-delà de la limite).
+const findStoredPlaces = async ({ kind, lat, lng, radiusKm, limit }) => {
   const kinds = kind === 'groceries' ? ['grocery'] : ['restaurant', 'fast_food'];
-  const docs = await Place.aggregate([
+  const max = clampLimit(limit);
+  const [docs, total] = await Promise.all([
+    Place.aggregate([
     {
       $geoNear: {
         near: { type: 'Point', coordinates: [lng, lat] },
@@ -39,9 +49,14 @@ const findStoredPlaces = async ({ kind, lat, lng, radiusKm }) => {
         query: { kind: { $in: kinds } },
       },
     },
-    { $limit: MAX_RESULTS },
+    { $limit: max },
+    ]),
+    Place.countDocuments({
+      kind: { $in: kinds },
+      location: { $geoWithin: { $centerSphere: [[lng, lat], radiusKm / 6378.1] } },
+    }),
   ]);
-  return docs.map(toApi);
+  return { items: docs.map(toApi), total };
 };
 
-module.exports = { findStoredPlaces, toApi };
+module.exports = { findStoredPlaces, toApi, clampLimit, DEFAULT_LIMIT, MAX_LIMIT };

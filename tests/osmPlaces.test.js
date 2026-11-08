@@ -43,3 +43,11 @@ test('format de réponse API', () => {
   assert.equal(api.distanceKm, 1.2);
   assert.equal(api.latitude, 46.2);
 });
+
+test('limite de résultats : défaut 1000, plafond 3000', () => {
+  const { clampLimit } = require('../utils/placeSearch');
+  assert.equal(clampLimit(undefined), 1000);
+  assert.equal(clampLimit('abc'), 1000);
+  assert.equal(clampLimit(250), 250);
+  assert.equal(clampLimit(999999), 3000);
+});
