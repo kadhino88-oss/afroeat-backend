@@ -12,8 +12,7 @@ const MAX_RESULTS = 500;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const cache = new Map();
 
-const AFRICAN_RE =
-  /afri|s[ée]n[ée]gal|ivoir|camerou|congo|nigeria|ghana|malien|mali\b|guin[ée]|togo|b[ée]nin|ethiop|[ée]rythr|maroc|moroc|alg[ée]r|tunis|egypt|[ée]gypt|somali|kenya|tchad|gabon|burkina|madagas|maur|exotic|tropic|antill|cara[iï]b/i;
+const { AFRICAN_RE } = require('./osmPlaces');
 
 const toRad = (d) => (d * Math.PI) / 180;
 const distanceKm = (lat1, lon1, lat2, lon2) => {

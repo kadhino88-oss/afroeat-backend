@@ -76,3 +76,24 @@ test('le workflow d\'import accepte plusieurs régions et protège la base', () 
   assert.match(script, /MAX_DB_MB/);
   assert.match(script, /AFRICAN_ONLY && !doc\.isAfrican/);
 });
+
+test('détection africaine : bons positifs, pas de faux positifs courants', () => {
+  const { AFRICAN_RE } = require('../utils/osmPlaces');
+  for (const t of ['Chez Awa sénégalais', 'Exotic Food Market', 'Afro Market', 'Mafé Express', "Cuisines d'Afrique", 'Gambia Corner']) {
+    assert.ok(AFRICAN_RE.test(t), t);
+  }
+  for (const t of ['Pizzeria Gambini', 'Trattoria Maurizio', 'Afrodite Taverna', "McDonald's", 'Coop Pronto']) {
+    assert.ok(!AFRICAN_RE.test(t), t);
+  }
+});
+
+test('AFROEAT ne référence que des commerces africains par défaut', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const controller = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'placeController.js'), 'utf8');
+  const script = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'import-osm-places.js'), 'utf8');
+  const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'import-osm-places.yml'), 'utf8');
+  assert.match(controller, /const africanOnly = req\.query\.all !== '1'/);
+  assert.match(script, /AFRICAN_ONLY \|\| 'true'/);
+  assert.match(wf, /default: true/);
+});

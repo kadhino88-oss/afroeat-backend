@@ -11,9 +11,9 @@ on:
         type: string
         default: europe/switzerland
       african_only:
-        description: "Ne garder que les lieux repérés comme africains (recommandé hors zone de lancement)"
+        description: "Ne garder que les lieux repérés comme africains (AFROEAT = commerces africains uniquement)"
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
