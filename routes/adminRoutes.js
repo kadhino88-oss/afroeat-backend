@@ -81,6 +81,12 @@ router.put('/users/:id/status', updateAdminUserStatus);
 router.put('/users/:id/verification', updateAdminUserVerification);
 
 /**
+ * Demandes d'inscription de commerces
+ */
+router.get('/partner-applications', listApplications);
+router.put('/partner-applications/:id', updateApplication);
+
+/**
  * Restaurants
  */
 router.get('/restaurants', getAdminRestaurants);
