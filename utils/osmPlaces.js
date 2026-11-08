@@ -1,7 +1,7 @@
 'use strict';
 
 const AFRICAN_RE =
-  /afri|s[ée]n[ée]gal|ivoir|camerou|congo|nigeria|ghana|malien|mali\b|guin[ée]|togo|b[ée]nin|ethiop|[ée]rythr|maroc|moroc|alg[ée]r|tunis|egypt|[ée]gypt|somali|kenya|tchad|gabon|burkina|madagas|maur/i;
+  /afri|s[ée]n[ée]gal|ivoir|camerou|congo|nigeria|ghana|malien|mali\b|guin[ée]|togo|b[ée]nin|ethiop|[ée]rythr|maroc|moroc|alg[ée]r|tunis|egypt|[ée]gypt|somali|kenya|tchad|gabon|burkina|madagas|maur|exotic|tropic|antill|cara[iï]b/i;
 
 const GROCERY_SHOPS = new Set(['supermarket', 'convenience', 'greengrocer', 'general', 'grocery', 'deli']);
 
