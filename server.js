@@ -19,9 +19,20 @@ const MONGO_URI = String(process.env.MONGO_URI || '').trim();
 const isProduction = NODE_ENV === 'production';
 const serverStartedAt = Date.now();
 
-const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
-  : [];
+// CORS_ORIGINS : liste principale. CORS_EXTRA_ORIGINS : origines ajoutées en plus
+// (ex. le site web de test, ou l'appli web lancée sur un ordinateur).
+const parseOrigins = (value) =>
+  String(value || '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
+const ALLOWED_ORIGINS = [
+  ...new Set([
+    ...parseOrigins(process.env.CORS_ORIGINS),
+    ...parseOrigins(process.env.CORS_EXTRA_ORIGINS),
+  ]),
+];
 
 let isShuttingDown = false;
 let httpServer = null;
