@@ -13,7 +13,7 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 const cache = new Map();
 
 const AFRICAN_RE =
-  /afri|s[ée]n[ée]gal|ivoir|camerou|congo|nigeria|ghana|malien|mali\b|guin[ée]|togo|b[ée]nin|ethiop|[ée]rythr|maroc|moroc|alg[ée]r|tunis|egypt|[ée]gypt|somali|kenya|tchad|gabon|burkina|madagas|maur/i;
+  /afri|s[ée]n[ée]gal|ivoir|camerou|congo|nigeria|ghana|malien|mali\b|guin[ée]|togo|b[ée]nin|ethiop|[ée]rythr|maroc|moroc|alg[ée]r|tunis|egypt|[ée]gypt|somali|kenya|tchad|gabon|burkina|madagas|maur|exotic|tropic|antill|cara[iï]b/i;
 
 const toRad = (d) => (d * Math.PI) / 180;
 const distanceKm = (lat1, lon1, lat2, lon2) => {
@@ -55,8 +55,8 @@ const normalizeElement = (el, kind, lat, lng) => {
     source: 'openstreetmap',
     category:
       kind === 'groceries'
-        ? isAfrican ? 'african-grocery' : 'grocery'
-        : tags.amenity === 'fast_food' ? 'fast-food' : 'restaurant',
+        ? 'african-grocery'
+        : tags.amenity === 'fast_food' && isAfrican ? 'african-fast-food' : 'restaurant',
     amenity: tags.amenity || tags.shop || null,
     name: tags.name || '',
     cuisine: tags.cuisine || '',

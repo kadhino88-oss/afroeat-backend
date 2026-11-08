@@ -11,7 +11,8 @@ const loadItems = async (params) => {
   } catch (error) {
     console.error('Places stockés indisponibles :', error.message);
   }
-  const items = await findPlaces(params);
+  const found = await findPlaces(params);
+  const items = params.africanOnly ? found.filter((p) => p.isAfrican) : found;
   return { items, total: items.length };
 };
 
@@ -31,7 +32,9 @@ const handler = (kind) => async (req, res) => {
   }
   const radiusKm = clampRadiusKm(req.query.radius ?? req.query.maxDistance);
   try {
-    const { items, total } = await loadItems({ kind, ...coords, radiusKm, limit: req.query.limit });
+    // Épiceries : uniquement africaines par défaut (?all=1 pour toutes les épiceries).
+    const africanOnly = kind === 'groceries' && req.query.all !== '1';
+    const { items, total } = await loadItems({ kind, ...coords, radiusKm, limit: req.query.limit, africanOnly });
     res.set('Cache-Control', 'public, max-age=300');
     if (kind === 'groceries') {
       return res.json({ success: true, radiusKm, count: items.length,
@@ -39,7 +42,7 @@ const handler = (kind) => async (req, res) => {
         hasMore: total > items.length, groceries: items });
     }
     const restaurants = items.filter((p) => p.category === 'restaurant');
-    const fastFoods = items.filter((p) => p.category === 'fast-food');
+    const fastFoods = items.filter((p) => p.category === 'african-fast-food');
     return res.json({
       success: true,
       radiusKm,

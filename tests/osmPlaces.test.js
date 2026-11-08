@@ -51,3 +51,16 @@ test('limite de résultats : défaut 1000, plafond 3000', () => {
   assert.equal(clampLimit(250), 250);
   assert.equal(clampLimit(999999), 3000);
 });
+
+test('catégories attendues par l\'appli', () => {
+  const base = { osmKey: 'node/2', name: 'X', location: { coordinates: [6, 46] }, distanceMeters: 100 };
+  assert.equal(toApi({ ...base, kind: 'grocery', isAfrican: true }).category, 'african-grocery');
+  assert.equal(toApi({ ...base, kind: 'fast_food', isAfrican: true }).category, 'african-fast-food');
+  assert.equal(toApi({ ...base, kind: 'fast_food', isAfrican: false }).category, 'restaurant');
+  assert.equal(toApi({ ...base, kind: 'restaurant' }).category, 'restaurant');
+});
+
+test('boutiques exotiques repérées comme africaines', () => {
+  const p = featureToPlace({ id: 'n5', properties: { shop: 'convenience', name: 'Exotic Food Market' }, geometry: { type: 'Point', coordinates: [6, 46] } });
+  assert.equal(p.isAfrican, true);
+});
