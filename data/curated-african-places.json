@@ -1,0 +1,104 @@
+[
+  {
+    "name": "Yamba",
+    "kind": "restaurant",
+    "cuisine": "Cuisine africaine contemporaine",
+    "address": "Rue des Deux-Ponts 2",
+    "postcode": "1205",
+    "city": "Genève",
+    "country": "Suisse",
+    "source": "https://access.sb/en/geneva/restaurants/dinner/yamba",
+    "verified": true
+  },
+  {
+    "name": "Gazelle d'Or African Village",
+    "kind": "restaurant",
+    "cuisine": "Cuisine érythréenne et éthiopienne",
+    "address": "Rue de Lyon 55",
+    "postcode": "1203",
+    "city": "Genève",
+    "country": "Suisse",
+    "source": "https://www.just-eat.ch/en/menu/gazelle-dor-african-village",
+    "verified": true
+  },
+  {
+    "name": "Nyala Barka",
+    "kind": "restaurant",
+    "cuisine": "Cuisine éthiopienne et érythréenne",
+    "address": "Rue Gourgas 4",
+    "postcode": "1205",
+    "city": "Genève",
+    "country": "Suisse",
+    "source": "https://spottedbylocals.com/geneva/nyala-barka",
+    "verified": true
+  },
+  {
+    "name": "Le 224",
+    "kind": "restaurant",
+    "cuisine": "Cuisine ouest-africaine",
+    "address": "1 rue du Docteur Favre",
+    "postcode": "74100",
+    "city": "Annemasse",
+    "country": "France",
+    "source": "https://www.cylex-locale.fr/entreprises/le-224-14233726.html",
+    "verified": true
+  },
+  {
+    "name": "Afri K Food",
+    "kind": "restaurant",
+    "cuisine": "Cuisine africaine halal",
+    "address": "1B rue Adrien Ligué",
+    "postcode": "74100",
+    "city": "Annemasse",
+    "country": "France",
+    "source": "https://www.eat-list.fr/annemasse-74100/restaurant-africain-78/afri-k-food-256738",
+    "verified": true
+  },
+  {
+    "name": "La Table d'Ebène",
+    "kind": "restaurant",
+    "cuisine": "Cuisine camerounaise fusion",
+    "address": "4 bis avenue d'Aléry",
+    "postcode": "74000",
+    "city": "Annecy",
+    "country": "France",
+    "source": "https://www.haute-savoie-tourisme.org/index.php/5391502-la-table-debene",
+    "verified": true
+  },
+  {
+    "name": "kfé-kko",
+    "kind": "restaurant",
+    "cuisine": "Bar-restaurant africain (thiéboudienne, poisson et poulet braisés)",
+    "address": "2 Allée des Chênes",
+    "postcode": "74100",
+    "city": "Vétraz-Monthoux",
+    "country": "France",
+    "source": "https://www.privateaser.com/lieu/58934-kfe-kko",
+    "verified": true,
+    "note": "Cité par le propriétaire du projet ; adresse issue d'une seule fiche à confirmer."
+  },
+  {
+    "name": "Le Palmarin African Food",
+    "kind": "restaurant",
+    "cuisine": "Cuisine sénégalaise",
+    "address": "Rue de Zurich 32",
+    "postcode": "1201",
+    "city": "Genève",
+    "country": "Suisse",
+    "source": "https://tripaligner.com/countries/switzerland-14/destinations/geneve-6623/places/le-palmarin-african-food-14480490",
+    "verified": false,
+    "note": "Adresse à confirmer (la fiche source dit « Zurich Street 32 »)."
+  },
+  {
+    "name": "AfroMarket",
+    "kind": "grocery",
+    "cuisine": "Épicerie africaine",
+    "address": "2 rue Alphonse Métral",
+    "postcode": "74000",
+    "city": "Annecy",
+    "country": "France",
+    "source": "https://www.pagesjaunes.fr/pros/08260168",
+    "verified": false,
+    "note": "Offre africaine à confirmer (un annuaire la classe en épicerie du monde)."
+  }
+]
