@@ -338,6 +338,7 @@ const defaultStripe = process.env.STRIPE_SECRET_KEY
 module.exports = {
   ...createSavedCardController({ stripe: defaultStripe, User: require('../models/User') }),
   createSavedCardController,
+  resolveReturnBase,
   toPublicCard,
   safeStripeMessage,
   PAYMENT_METHOD_ID_PATTERN,
