@@ -17,6 +17,7 @@ const {
 const { handleConnectedAccountUpdated } = require('./connectController');
 const { evaluatePaymentChannel } = require('../utils/paymentChannel');
 const { getOrderPaymentCreationBlock } = require('../utils/orderPaymentGuard');
+const { isProductionLocked } = require('../utils/runtimeEnvironment');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -56,7 +57,7 @@ const hasStripeTestSecret = () =>
   /^(sk|rk)_test_/.test(String(process.env.STRIPE_SECRET_KEY || ''));
 
 const canCreateDevelopmentCardPayment = () =>
-  process.env.NODE_ENV !== 'production' && Boolean(stripe) && hasStripeTestSecret();
+  !isProductionLocked() && Boolean(stripe) && hasStripeTestSecret();
 
 const stripeUnavailable = (res) =>
   res.status(503).json({
@@ -201,7 +202,7 @@ const createPaymentIntent = async (req, res) => {
     // card payments fail-closed until staging verification covers payment, delivery,
     // payout, refund, dispute and reconciliation paths. Unit tests alone are not
     // sufficient to remove this safeguard.
-    if (process.env.NODE_ENV === 'production') {
+    if (isProductionLocked()) {
       return res.status(503).json({
         success: false,
         code: 'MARKETPLACE_PAYMENTS_NOT_READY',
@@ -312,7 +313,7 @@ const createCheckoutSession = async (req, res) => {
       });
     }
 
-    if (process.env.NODE_ENV === 'production') {
+    if (isProductionLocked()) {
       return res.status(503).json({
         success: false,
         code: 'MARKETPLACE_PAYMENTS_NOT_READY',
@@ -734,7 +735,7 @@ const handleWebhook = async (req, res) => {
 };
 
 const getAvailablePaymentMethods = (req, res) => {
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = isProductionLocked();
 
   return res.status(200).json({
     success: true,
@@ -750,7 +751,7 @@ const getAvailablePaymentMethods = (req, res) => {
 };
 
 const selectCashPayment = async (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
+  if (isProductionLocked()) {
     return res.status(503).json({
       success: false,
       code: 'CASH_ON_DELIVERY_DISABLED',
