@@ -27,6 +27,7 @@ const {
 const {
   listSavedCards,
   createCardSetupIntent,
+  createCardSetupSession,
   setDefaultSavedCard,
   removeSavedCard,
 } = require('../controllers/savedCardController');
@@ -39,6 +40,7 @@ router.get('/methods', protect, allowRoles('client', 'admin'), getAvailablePayme
 // Cartes enregistrées du client (ajout par SetupIntent, jamais de numéro de carte ici).
 router.get('/cards', protect, allowRoles('client'), listSavedCards);
 router.post('/cards/setup-intent', protect, allowRoles('client'), createCardSetupIntent);
+router.post('/cards/setup-session', protect, allowRoles('client'), createCardSetupSession);
 router.patch('/cards/:paymentMethodId/default', protect, allowRoles('client'), setDefaultSavedCard);
 router.delete('/cards/:paymentMethodId', protect, allowRoles('client'), removeSavedCard);
 
