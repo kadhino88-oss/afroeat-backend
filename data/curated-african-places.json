@@ -66,6 +66,18 @@
     "verified": true
   },
   {
+    "name": "kfé-kko",
+    "kind": "restaurant",
+    "cuisine": "Bar-restaurant africain (thiéboudienne, poisson et poulet braisés)",
+    "address": "2 Allée des Chênes",
+    "postcode": "74100",
+    "city": "Vétraz-Monthoux",
+    "country": "France",
+    "source": "https://www.privateaser.com/lieu/58934-kfe-kko",
+    "verified": true,
+    "note": "Cité par le propriétaire du projet ; adresse issue d'une seule fiche à confirmer."
+  },
+  {
     "name": "Le Palmarin African Food",
     "kind": "restaurant",
     "cuisine": "Cuisine sénégalaise",
