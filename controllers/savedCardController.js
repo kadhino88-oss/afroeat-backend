@@ -263,7 +263,8 @@ const createSavedCardController = ({ stripe, User }) => {
       const session = await stripe.checkout.sessions.create({
         mode: 'setup',
         customer: customerId,
-        payment_method_types: ['card'],
+        // Pas de payment_method_types : Stripe refuse ce paramètre pour Checkout (moyens de
+        // paiement gérés depuis le tableau de bord Stripe, « card » activé par défaut).
         success_url: `${base}/profile/payment?cardSetup=success`,
         cancel_url: `${base}/profile/payment?cardSetup=cancel`,
         metadata: { userId: String(req.user._id), platform: 'afroeat' },
