@@ -23,7 +23,7 @@
     "expo-server-sdk": "^8.0.0",
     "express": "^5.3.0",
     "express-mongo-sanitize": "^2.2.0",
-    "express-rate-limit": "^8.7.2",
+    "express-rate-limit": "^8.7.3",
     "helmet": "^8.3.0",
     "hpp": "^0.2.3",
     "jsonwebtoken": "^9.0.3",
