@@ -43,4 +43,27 @@ const toPlaceDoc = (entry, { lat, lng }) => ({
   importedAt: new Date(),
 });
 
-module.exports = { slugify, makeKey, validateEntry, buildQuery, toPlaceDoc, KINDS };
+// Mots trop génériques pour dire que deux noms désignent le même commerce.
+const GENERIC_TOKENS = new Set([
+  'african', 'africain', 'africaine', 'afrique', 'food', 'restaurant', 'village',
+  'cuisine', 'chez', 'bar', 'grill', 'les', 'des', 'the', 'and', 'erythreen', 'ethiopien',
+]);
+
+const nameTokens = (value) =>
+  slugify(value)
+    .split('-')
+    .filter((token) => (token.length >= 3 || /^\d+$/.test(token)) && !GENERIC_TOKENS.has(token));
+
+/** Deux noms partagent-ils au moins un mot distinctif ? (ex. « Gazelle d'Or … » / « La Gazelle d'Or (…) ») */
+const sharesDistinctiveName = (a, b) => {
+  const left = new Set(nameTokens(a));
+  return nameTokens(b).some((token) => left.has(token));
+};
+
+// Distance (m) en dessous de laquelle un lieu OSM de même nom est considéré comme le même commerce.
+const DUPLICATE_RADIUS_METERS = 80;
+
+module.exports = {
+  slugify, makeKey, validateEntry, buildQuery, toPlaceDoc, KINDS,
+  sharesDistinctiveName, DUPLICATE_RADIUS_METERS,
+};
