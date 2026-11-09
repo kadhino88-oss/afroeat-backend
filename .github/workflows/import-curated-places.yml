@@ -1,0 +1,40 @@
+name: Importer les commerces africains saisis à la main
+
+# Bouton manuel (onglet « Actions » → « Run workflow »).
+# Lit data/curated-african-places.json, géocode les adresses (OpenStreetMap Nominatim)
+# et les enregistre dans la base utilisée par l'API (secret PLACES_MONGO_URI).
+on:
+  workflow_dispatch:
+    inputs:
+      include_unverified:
+        description: "Importer aussi les lieux marqués « à vérifier » (verified: false)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  import-curated-places:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Importer
+        env:
+          MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
+          INCLUDE_UNVERIFIED: ${{ inputs.include_unverified }}
+        run: |
+          if [ -z "$MONGO_URI" ]; then
+            echo "::error::Le secret PLACES_MONGO_URI est absent."
+            exit 1
+          fi
+          node scripts/import-curated-places.js
