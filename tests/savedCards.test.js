@@ -254,7 +254,8 @@ test('setup-session web : crée une session Checkout en mode setup pour le clien
     const args = stripe.calls.find(([n]) => n === 'checkout.sessions.create')[1];
     assert.equal(args.mode, 'setup');
     assert.equal(args.customer, 'cus_mine');
-    assert.deepEqual(args.payment_method_types, ['card']);
+    // Stripe refuse payment_method_types pour Checkout : il ne doit pas être envoyé.
+    assert.equal('payment_method_types' in args, false);
     assert.equal(args.success_url, 'https://afroeat.app/profile/payment?cardSetup=success');
     assert.equal(args.cancel_url, 'https://afroeat.app/profile/payment?cardSetup=cancel');
   });
