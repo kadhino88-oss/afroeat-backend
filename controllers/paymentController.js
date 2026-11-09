@@ -351,7 +351,8 @@ const createCheckoutSession = async (req, res) => {
       {
         mode: 'payment',
         customer: stripeCustomerId,
-        payment_method_types: ['card'],
+        // Pas de payment_method_types : Stripe le refuse pour Checkout (moyens de paiement
+        // gérés depuis le tableau de bord Stripe, « card » activé par défaut).
         client_reference_id: order._id.toString(),
         success_url: `${appScheme}://payment/success?orderId=${order._id}&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${appScheme}://payment/cancel?orderId=${order._id}`,
