@@ -18,6 +18,7 @@ const { handleConnectedAccountUpdated } = require('./connectController');
 const { evaluatePaymentChannel } = require('../utils/paymentChannel');
 const { getOrderPaymentCreationBlock } = require('../utils/orderPaymentGuard');
 const { isProductionLocked } = require('../utils/runtimeEnvironment');
+const { resolveReturnBase } = require('./savedCardController');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -345,8 +346,13 @@ const createCheckoutSession = async (req, res) => {
 
     const stripeCustomerId = await ensureStripeCustomer(order);
 
+    // Web : retour https vers une origine déjà autorisée (anti open-redirect).
+    // Mobile : lien profond de l'appli (Stripe n'accepte pas toujours un schéma personnalisé,
+    // mais c'est le comportement historique du mobile).
     const appScheme = process.env.APP_DEEP_LINK_SCHEME || 'afroeat';
     const publicWebUrl = process.env.PUBLIC_WEB_URL || 'https://afroeat.app';
+    const webBase = req.body?.platform === 'web' ? resolveReturnBase(req.body?.returnUrl) : null;
+    const returnBase = webBase || `${appScheme}:/`;
 
     const session = await stripe.checkout.sessions.create(
       {
@@ -355,8 +361,8 @@ const createCheckoutSession = async (req, res) => {
         // Pas de payment_method_types : Stripe le refuse pour Checkout (moyens de paiement
         // gérés depuis le tableau de bord Stripe, « card » activé par défaut).
         client_reference_id: order._id.toString(),
-        success_url: `${appScheme}://payment/success?orderId=${order._id}&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${appScheme}://payment/cancel?orderId=${order._id}`,
+        success_url: `${returnBase}/payment/success?orderId=${order._id}&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${returnBase}/payment/cancel?orderId=${order._id}`,
         metadata: {
           orderId: order._id.toString(),
           userId: order.user?._id?.toString() || '',
