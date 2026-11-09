@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const { isMatchingPaymentIntent } = require('./paymentValidation');
+const { isProductionLocked } = require('./runtimeEnvironment');
 
 const isConnectPayoutsEnabled = () => {
   if (
@@ -13,7 +14,7 @@ const isConnectPayoutsEnabled = () => {
   }
 
   const secretKey = String(process.env.STRIPE_SECRET_KEY || '').trim();
-  if (process.env.NODE_ENV === 'production') {
+  if (isProductionLocked()) {
     return secretKey.startsWith('sk_live_');
   }
 

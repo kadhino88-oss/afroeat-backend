@@ -22,6 +22,7 @@ const { sanitizeOrderForViewer } = require('../utils/orderResponseSanitizer');
 const { evaluateCourierAssignmentEligibility } = require('../utils/courierAssignmentEligibility');
 const { isConnectPayoutsEnabled } = require('../utils/marketplacePayouts');
 const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
+const { isProductionLocked } = require('../utils/runtimeEnvironment');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -746,7 +747,7 @@ const createOrder = async (req, res) => {
 
     // This repository snapshot is not cleared for marketplace production:
     // no verified payout corridor or cash-collection ledger is enabled.
-    if (process.env.NODE_ENV === 'production') {
+    if (isProductionLocked()) {
       return res.status(503).json({
         success: false,
         code: 'MARKETPLACE_COMMERCE_NOT_READY',
