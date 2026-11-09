@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { slugify, makeKey, validateEntry, buildQuery, toPlaceDoc } = require('../utils/curatedPlaces');
+const { slugify, makeKey, validateEntry, buildQuery, toPlaceDoc, sharesDistinctiveName } = require('../utils/curatedPlaces');
 
 const entries = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'curated-african-places.json'), 'utf8'));
 
@@ -35,4 +35,15 @@ test('requête de géocodage et document Place (africain, point [lng, lat])', ()
 test('entrée invalide refusée', () => {
   assert.match(validateEntry({ name: 'X', kind: 'bar', address: 'a', city: 'b' }), /type invalide/);
   assert.match(validateEntry({ name: '', kind: 'grocery', address: 'a', city: 'b' }), /nom manquant/);
+});
+
+test('doublons OSM : mêmes commerces reconnus, commerces différents non confondus', () => {
+  assert.equal(sharesDistinctiveName("La Gazelle d'Or (Restaurant Erythréen)", "Gazelle d'Or African Village"), true);
+  assert.equal(sharesDistinctiveName('Le Palmarin', 'Le Palmarin African Food'), true);
+  assert.equal(sharesDistinctiveName('Nyala Barka', 'Nyala Barka'), true);
+  assert.equal(sharesDistinctiveName('Le 224', 'Le 224'), true);
+  // Deux commerces voisins sans lien : pas de fusion.
+  assert.equal(sharesDistinctiveName('Yamba', 'Mosaïque'), false);
+  assert.equal(sharesDistinctiveName('Best African Food', 'T&A African Food'), false);
+  assert.equal(sharesDistinctiveName('African Food', 'Restaurant Africain'), false);
 });

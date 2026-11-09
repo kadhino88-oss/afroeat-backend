@@ -8,7 +8,9 @@ const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
 const Place = require('../models/Place');
-const { validateEntry, buildQuery, toPlaceDoc, makeKey } = require('../utils/curatedPlaces');
+const {
+  validateEntry, buildQuery, toPlaceDoc, makeKey, sharesDistinctiveName, DUPLICATE_RADIUS_METERS,
+} = require('../utils/curatedPlaces');
 
 const INCLUDE_UNVERIFIED = String(process.env.INCLUDE_UNVERIFIED || 'false').toLowerCase() === 'true';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -47,9 +49,21 @@ const main = async () => {
       if (!point) { console.warn(`Adresse introuvable : ${entry.name} (${buildQuery(entry)})`); }
       else {
         const doc = toPlaceDoc(entry, point);
-        await Place.updateOne({ osmKey: doc.osmKey }, { $set: doc }, { upsert: true });
-        imported += 1;
-        console.log(`OK : ${entry.name} (${makeKey(entry)}) → ${point.lat}, ${point.lng}`);
+        // Déjà présent via OpenStreetMap (même nom, < 80 m) : on garde la fiche OSM, plus complète
+        // (téléphone, horaires, site), et on retire notre éventuel doublon saisi à la main.
+        const nearby = await Place.find({
+          osmKey: { $not: /^curated\// },
+          location: { $nearSphere: { $geometry: doc.location, $maxDistance: DUPLICATE_RADIUS_METERS } },
+        }).select('name').lean();
+        const twin = nearby.find((place) => sharesDistinctiveName(place.name, entry.name));
+        if (twin) {
+          const removed = await Place.deleteOne({ osmKey: doc.osmKey });
+          console.log(`Déjà dans OpenStreetMap : ${entry.name} ≈ « ${twin.name} »${removed.deletedCount ? ' (doublon saisi retiré)' : ''}`);
+        } else {
+          await Place.updateOne({ osmKey: doc.osmKey }, { $set: doc }, { upsert: true });
+          imported += 1;
+          console.log(`OK : ${entry.name} (${makeKey(entry)}) → ${point.lat}, ${point.lng}`);
+        }
       }
     } catch (error) {
       console.warn(`Échec géocodage ${entry.name} :`, error.message);
