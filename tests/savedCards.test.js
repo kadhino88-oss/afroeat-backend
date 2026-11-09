@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createSavedCardController, toPublicCard } = require('../controllers/savedCardController');
+const { createSavedCardController, toPublicCard, safeStripeMessage } = require('../controllers/savedCardController');
 
 const USER_ID = '650000000000000000000001';
 
@@ -286,4 +286,12 @@ test('toPublicCard : valeurs par défaut sûres', () => {
   assert.deepEqual(toPublicCard({ id: 'pm_x0000001' }, null), {
     id: 'pm_x0000001', brand: 'card', last4: '', expMonth: null, expYear: null, isDefault: false,
   });
+});
+
+test('journal : le message Stripe est conservé mais toute clé est masquée', () => {
+  assert.equal(
+    safeStripeMessage({ raw: { message: 'Invalid URL: x. Key sk_test_ABC123def used' } }),
+    'Invalid URL: x. Key sk_test_*** used'
+  );
+  assert.equal(safeStripeMessage(null), '');
 });

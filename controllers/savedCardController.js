@@ -27,8 +27,20 @@ const stripeUnavailable = (res) =>
     message: 'Les paiements par carte sont temporairement indisponibles.',
   });
 
+// Message d'erreur Stripe pour les journaux serveur uniquement (clés masquées, jamais renvoyé au client).
+const safeStripeMessage = (error) =>
+  String(error?.raw?.message || error?.message || '')
+    .replace(/(sk|rk|pk)_(test|live)_[A-Za-z0-9]+/g, '$1_$2_***')
+    .slice(0, 300);
+
 const stripeFailure = (res, error, context) => {
-  console.error(`Cartes enregistrées — ${context} :`, error?.type || error?.name, error?.code || '');
+  console.error(
+    `Cartes enregistrées — ${context} :`,
+    error?.type || error?.name,
+    error?.code || '',
+    error?.param || '',
+    safeStripeMessage(error)
+  );
   return res.status(502).json({
     success: false,
     code: 'STRIPE_ERROR',
@@ -318,5 +330,6 @@ module.exports = {
   ...createSavedCardController({ stripe: defaultStripe, User: require('../models/User') }),
   createSavedCardController,
   toPublicCard,
+  safeStripeMessage,
   PAYMENT_METHOD_ID_PATTERN,
 };
