@@ -5,7 +5,8 @@
  *
  * Routes (toutes réservées au rôle `client`) :
  *   GET    /api/payments/cards                       liste les cartes du client
- *   POST   /api/payments/cards/setup-intent          prépare l'ajout d'une carte
+ *   POST   /api/payments/cards/setup-intent          prépare l'ajout d'une carte (appli mobile)
+ *   POST   /api/payments/cards/setup-session         ajout d'une carte depuis le web (Stripe Checkout, mode setup)
  *   PATCH  /api/payments/cards/:paymentMethodId/default
  *   DELETE /api/payments/cards/:paymentMethodId
  *
@@ -55,6 +56,47 @@ const getDefaultPaymentMethodId = (customer) => {
 const getPlatformCountry = () => {
   const country = String(process.env.STRIPE_PLATFORM_COUNTRY || '').trim().toUpperCase();
   return /^[A-Z]{2}$/.test(country) ? country : undefined;
+};
+
+const parseOriginList = (value) =>
+  String(value || '')
+    .split(',')
+    .map((item) => item.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
+/** Origines web autorisées pour le retour après l'ajout d'une carte. */
+const getAllowedReturnOrigins = () => {
+  const origins = new Set([
+    ...parseOriginList(process.env.CORS_ORIGINS),
+    ...parseOriginList(process.env.CORS_EXTRA_ORIGINS),
+    ...parseOriginList(process.env.PUBLIC_WEB_URL),
+  ]);
+  return origins;
+};
+
+/**
+ * Retourne une URL de retour sûre : uniquement une origine déjà autorisée
+ * (anti open-redirect). À défaut, PUBLIC_WEB_URL ; sinon null.
+ */
+const resolveReturnBase = (candidate) => {
+  const allowed = getAllowedReturnOrigins();
+  if (candidate) {
+    try {
+      const url = new URL(String(candidate));
+      if ((url.protocol === 'https:' || url.protocol === 'http:') && allowed.has(url.origin)) {
+        return url.origin;
+      }
+    } catch (_) {
+      /* URL invalide : on retombe sur la valeur par défaut */
+    }
+  }
+  const fallback = parseOriginList(process.env.PUBLIC_WEB_URL)[0];
+  if (!fallback) return null;
+  try {
+    return new URL(fallback).origin;
+  } catch (_) {
+    return null;
+  }
 };
 
 const createSavedCardController = ({ stripe, User }) => {
@@ -182,6 +224,45 @@ const createSavedCardController = ({ stripe, User }) => {
     }
   };
 
+  const createCardSetupSession = async (req, res) => {
+    if (!stripe) return stripeUnavailable(res);
+
+    if (req.body?.consentAccepted !== true) {
+      return res.status(400).json({
+        success: false,
+        code: 'CARD_CONSENT_REQUIRED',
+        message: 'Le consentement est requis pour enregistrer une carte.',
+      });
+    }
+
+    const base = resolveReturnBase(req.body?.returnUrl);
+    if (!base) {
+      return res.status(400).json({
+        success: false,
+        code: 'RETURN_URL_NOT_ALLOWED',
+        message: "Adresse de retour non autorisée.",
+      });
+    }
+
+    try {
+      const customerId = await ensureCustomer(req.user._id);
+      if (!customerId) return notFound(res);
+
+      const session = await stripe.checkout.sessions.create({
+        mode: 'setup',
+        customer: customerId,
+        payment_method_types: ['card'],
+        success_url: `${base}/profile/payment?cardSetup=success`,
+        cancel_url: `${base}/profile/payment?cardSetup=cancel`,
+        metadata: { userId: String(req.user._id), platform: 'afroeat' },
+      });
+
+      return res.status(200).json({ success: true, url: session.url });
+    } catch (error) {
+      return stripeFailure(res, error, 'session ajout carte web');
+    }
+  };
+
   const setDefaultSavedCard = async (req, res) => {
     if (!stripe) return stripeUnavailable(res);
 
@@ -226,7 +307,7 @@ const createSavedCardController = ({ stripe, User }) => {
     }
   };
 
-  return { listSavedCards, createCardSetupIntent, setDefaultSavedCard, removeSavedCard };
+  return { listSavedCards, createCardSetupIntent, createCardSetupSession, setDefaultSavedCard, removeSavedCard };
 };
 
 const defaultStripe = process.env.STRIPE_SECRET_KEY

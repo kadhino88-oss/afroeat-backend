@@ -59,6 +59,11 @@ const makeStripe = (overrides = {}) => {
     setupIntents: {
       create: async (args) => { calls.push(['setupIntents.create', args]); return { id: 'seti_1', client_secret: 'seti_1_secret_x' }; },
     },
+    checkout: {
+      sessions: {
+        create: async (args) => { calls.push(['checkout.sessions.create', args]); return { id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' }; },
+      },
+    },
     ...overrides,
   };
   return stripe;
@@ -218,6 +223,63 @@ test('erreur Stripe : réponse 502 générique, sans fuite de détails', async (
   console.error = originalError;
   assert.equal(res.statusCode, 502);
   assert.doesNotMatch(JSON.stringify(res.body), /sk_test|detail interne/);
+});
+
+const withEnv = async (env, fn) => {
+  const saved = {};
+  for (const k of Object.keys(env)) { saved[k] = process.env[k]; process.env[k] = env[k]; }
+  try { return await fn(); } finally {
+    for (const k of Object.keys(env)) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+  }
+};
+
+test('setup-session web : 503 sans Stripe, 400 sans consentement', async () => {
+  const none = createSavedCardController({ stripe: null, User: makeUserModel() });
+  assert.equal((await run(none, 'createCardSetupSession', { body: { consentAccepted: true } })).statusCode, 503);
+  const stripe = makeStripe();
+  const controller = createSavedCardController({ stripe, User: makeUserModel() });
+  const res = await run(controller, 'createCardSetupSession', { body: {} });
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body.code, 'CARD_CONSENT_REQUIRED');
+  assert.equal(stripe.calls.length, 0);
+});
+
+test('setup-session web : crée une session Checkout en mode setup pour le client', async () => {
+  await withEnv({ PUBLIC_WEB_URL: 'https://afroeat.app', CORS_ORIGINS: '', CORS_EXTRA_ORIGINS: '' }, async () => {
+    const stripe = makeStripe();
+    const controller = createSavedCardController({ stripe, User: makeUserModel({ stripeCustomerId: 'cus_mine' }) });
+    const res = await run(controller, 'createCardSetupSession', { body: { consentAccepted: true } });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.url, 'https://checkout.stripe.com/c/pay/cs_1');
+    const args = stripe.calls.find(([n]) => n === 'checkout.sessions.create')[1];
+    assert.equal(args.mode, 'setup');
+    assert.equal(args.customer, 'cus_mine');
+    assert.deepEqual(args.payment_method_types, ['card']);
+    assert.equal(args.success_url, 'https://afroeat.app/profile/payment?cardSetup=success');
+    assert.equal(args.cancel_url, 'https://afroeat.app/profile/payment?cardSetup=cancel');
+  });
+});
+
+test('setup-session web : origine de retour autorisée acceptée, étrangère ignorée (anti open-redirect)', async () => {
+  await withEnv({ PUBLIC_WEB_URL: 'https://afroeat.app', CORS_ORIGINS: 'https://afroeat-app.vercel.app', CORS_EXTRA_ORIGINS: '' }, async () => {
+    const ok = makeStripe();
+    await run(createSavedCardController({ stripe: ok, User: makeUserModel({ stripeCustomerId: 'cus_mine' }) }),
+      'createCardSetupSession', { body: { consentAccepted: true, returnUrl: 'https://afroeat-app.vercel.app/x' } });
+    assert.match(ok.calls.find(([n]) => n === 'checkout.sessions.create')[1].success_url, /^https:\/\/afroeat-app\.vercel\.app\//);
+
+    const evil = makeStripe();
+    await run(createSavedCardController({ stripe: evil, User: makeUserModel({ stripeCustomerId: 'cus_mine' }) }),
+      'createCardSetupSession', { body: { consentAccepted: true, returnUrl: 'https://evil.example/steal' } });
+    assert.match(evil.calls.find(([n]) => n === 'checkout.sessions.create')[1].success_url, /^https:\/\/afroeat\.app\//);
+  });
+});
+
+test('setup-session web : aucune origine configurée → 400', async () => {
+  await withEnv({ PUBLIC_WEB_URL: '', CORS_ORIGINS: '', CORS_EXTRA_ORIGINS: '' }, async () => {
+    const controller = createSavedCardController({ stripe: makeStripe(), User: makeUserModel() });
+    const res = await run(controller, 'createCardSetupSession', { body: { consentAccepted: true } });
+    assert.equal(res.statusCode, 400);
+  });
 });
 
 test('toPublicCard : valeurs par défaut sûres', () => {
