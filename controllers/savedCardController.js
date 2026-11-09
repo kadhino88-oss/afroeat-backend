@@ -111,6 +111,11 @@ const resolveReturnBase = (candidate) => {
   }
 };
 
+const getSetupCurrency = () => {
+  const currency = String(process.env.STRIPE_SETUP_CURRENCY || 'chf').trim().toLowerCase();
+  return /^[a-z]{3}$/.test(currency) ? currency : 'chf';
+};
+
 const createSavedCardController = ({ stripe, User }) => {
   const readCustomerId = async (userId) => {
     const user = await User.findById(userId).select('stripeCustomerId email name');
@@ -263,6 +268,9 @@ const createSavedCardController = ({ stripe, User }) => {
       const session = await stripe.checkout.sessions.create({
         mode: 'setup',
         customer: customerId,
+        // Sans payment_method_types, Stripe exige la devise pour choisir les moyens de paiement
+        // affichés (une carte enregistrée reste utilisable dans toutes les devises).
+        currency: getSetupCurrency(),
         // Pas de payment_method_types : Stripe refuse ce paramètre pour Checkout (moyens de
         // paiement gérés depuis le tableau de bord Stripe, « card » activé par défaut).
         success_url: `${base}/profile/payment?cardSetup=success`,
