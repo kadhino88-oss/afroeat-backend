@@ -345,7 +345,8 @@ const registerUser = async (req, res) => {
       workAuthorization: payload.workAuthorization,
       isIdentityVerified: false,
       isWorkAuthorized: payload.role === 'client',
-      accountStatus: 'pending_verification',
+      // Un client n'a aucune validation à attendre ; restaurant/livreur restent soumis à validation.
+      accountStatus: payload.role === 'client' ? 'active' : 'pending_verification',
     });
 
     await newUser.save();
