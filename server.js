@@ -21,6 +21,8 @@ const serverStartedAt = Date.now();
 
 // CORS_ORIGINS : liste principale. CORS_EXTRA_ORIGINS : origines ajoutées en plus
 // (ex. le site web de test, ou l'appli web lancée sur un ordinateur).
+const { isOriginAllowed } = require('./utils/corsOrigins');
+
 const parseOrigins = (value) =>
   String(value || '')
     .split(',')
@@ -96,7 +98,7 @@ const corsOptions = {
   origin(origin, callback) {
     if (!origin) return callback(null, true);
     if (!isProduction) return callback(null, true);
-    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    if (isOriginAllowed(origin, ALLOWED_ORIGINS)) return callback(null, true);
     return callback(new Error('Origine non autorisée par CORS'));
   },
   credentials: true,
