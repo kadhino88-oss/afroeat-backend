@@ -153,6 +153,12 @@ const isAccountAllowedToAccessProtectedRoutes = (user) => {
     return true;
   }
 
+  // Comptes clients créés avant la correction (statut resté « pending_verification »).
+  // Un client n'a aucune validation à attendre ; les comptes suspendus/rejetés restent bloqués.
+  if (status === 'pending_verification' && normalizeString(user?.role).toLowerCase() === 'client') {
+    return true;
+  }
+
   return AUTHORIZED_ACTIVE_STATUSES.includes(status);
 };
 
