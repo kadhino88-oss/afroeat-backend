@@ -256,6 +256,8 @@ test('setup-session web : crée une session Checkout en mode setup pour le clien
     assert.equal(args.customer, 'cus_mine');
     // Stripe refuse payment_method_types pour Checkout : il ne doit pas être envoyé.
     assert.equal('payment_method_types' in args, false);
+    // Sans payment_method_types, Stripe exige une devise pour la session Checkout.
+    assert.equal(args.currency, 'chf');
     assert.equal(args.success_url, 'https://afroeat.app/profile/payment?cardSetup=success');
     assert.equal(args.cancel_url, 'https://afroeat.app/profile/payment?cardSetup=cancel');
   });
@@ -295,4 +297,19 @@ test('journal : le message Stripe est conservé mais toute clé est masquée', (
     'Invalid URL: x. Key sk_test_*** used'
   );
   assert.equal(safeStripeMessage(null), '');
+});
+
+test('setup-session web : devise configurable, valeur invalide ignorée', async () => {
+  await withEnv({ PUBLIC_WEB_URL: 'https://afroeat.app', STRIPE_SETUP_CURRENCY: 'EUR' }, async () => {
+    const eur = makeStripe();
+    await run(createSavedCardController({ stripe: eur, User: makeUserModel({ stripeCustomerId: 'cus_mine' }) }),
+      'createCardSetupSession', { body: { consentAccepted: true } });
+    assert.equal(eur.calls.find(([n]) => n === 'checkout.sessions.create')[1].currency, 'eur');
+  });
+  await withEnv({ PUBLIC_WEB_URL: 'https://afroeat.app', STRIPE_SETUP_CURRENCY: 'x$' }, async () => {
+    const bad = makeStripe();
+    await run(createSavedCardController({ stripe: bad, User: makeUserModel({ stripeCustomerId: 'cus_mine' }) }),
+      'createCardSetupSession', { body: { consentAccepted: true } });
+    assert.equal(bad.calls.find(([n]) => n === 'checkout.sessions.create')[1].currency, 'chf');
+  });
 });
