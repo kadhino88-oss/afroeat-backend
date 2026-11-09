@@ -81,13 +81,12 @@
     "name": "Le Palmarin African Food",
     "kind": "restaurant",
     "cuisine": "Cuisine sénégalaise",
-    "address": "Rue de Zurich 32",
+    "address": "Rue de Bâle 14",
     "postcode": "1201",
     "city": "Genève",
     "country": "Suisse",
-    "source": "https://tripaligner.com/countries/switzerland-14/destinations/geneve-6623/places/le-palmarin-african-food-14480490",
-    "verified": false,
-    "note": "Adresse à confirmer (la fiche source dit « Zurich Street 32 »)."
+    "source": "https://www.ubereats.com/ch-fr/store/le-palmarin/wzkGBv7xXQmTFkH7NGlyvA",
+    "verified": true
   },
   {
     "name": "AfroMarket",
@@ -100,5 +99,61 @@
     "source": "https://www.pagesjaunes.fr/pros/08260168",
     "verified": false,
     "note": "Offre africaine à confirmer (un annuaire la classe en épicerie du monde)."
+  },
+  {
+    "name": "O'Saveurs d'Afrique",
+    "kind": "restaurant",
+    "cuisine": "Cuisine africaine maison, halal",
+    "address": "5 avenue Pasteur",
+    "postcode": "74100",
+    "city": "Annemasse",
+    "country": "France",
+    "source": "https://www.facebook.com/p/Osaveurs-dAfrique-annemasse-100041947853911/",
+    "verified": true,
+    "note": "Cité par le propriétaire du projet ; ouverture récente, statut à confirmer."
+  },
+  {
+    "name": "La Couronne d'Or",
+    "kind": "restaurant",
+    "cuisine": "Spécialités africaines (poulet grillé burkinabè, attiéké, chikwangue)",
+    "address": "Quai du Seujet 36",
+    "postcode": "1201",
+    "city": "Genève",
+    "country": "Suisse",
+    "source": "https://www.tripadvisor.com/Restaurant_Review-g188057-d23585477-Reviews-Restaurant_La_Couronne_d_Or-Geneva.html",
+    "verified": true,
+    "note": "Cité par le propriétaire du projet."
+  },
+  {
+    "name": "T&A African Food",
+    "kind": "fast_food",
+    "cuisine": "Plats braisés camerounais, à emporter et en livraison",
+    "address": "Route de Frontenex 39",
+    "city": "Genève",
+    "country": "Suisse",
+    "source": "https://www.just-eat.ch/en/menu/ta-african-food",
+    "verified": true
+  },
+  {
+    "name": "Best African Food",
+    "kind": "fast_food",
+    "cuisine": "Poulet rôti, alloco, attiéké, à emporter et en livraison",
+    "address": "Rue du Clos 15",
+    "city": "Genève",
+    "country": "Suisse",
+    "source": "https://www.ubereats.com/ch/store/best-african-food/jhLMkAsSRziuwz_9pzQTcQ",
+    "verified": true
+  },
+  {
+    "name": "Boucherie Afro Fouta",
+    "kind": "grocery",
+    "cuisine": "Boucherie halal et épicerie africaine",
+    "address": "6 rue Adrien Ligué",
+    "postcode": "74100",
+    "city": "Annemasse",
+    "country": "France",
+    "source": "https://www.tiktok.com/discover/boucherie-annemasse-halal",
+    "verified": false,
+    "note": "Source unique (TikTok) : offre et horaires à confirmer."
   }
 ]
