@@ -1,6 +1,6 @@
 'use strict';
 
-const TYPES = ['restaurant', 'grocery', 'shop', 'drinks', 'other'];
+const TYPES = ['restaurant', 'grocery', 'shop', 'drinks', 'other', 'courier'];
 const STATUSES = ['new', 'contacted', 'approved', 'rejected'];
 
 const text = (value, max) => String(value ?? '').trim().slice(0, max);

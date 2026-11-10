@@ -330,6 +330,51 @@ const main = async () => {
     expect(response.json?.code === 'INVITE_USED', `code ${response.json?.code}`);
   });
 
+  // ─── Invitation d'un livreur ───
+  const courierEmail = `e2e-courier-${run}@afroeat.test`;
+  await step('livreur : candidature, invitation, création du compte « livreur »', async () => {
+    const applied = await call('POST', '/partner-applications', {
+      body: {
+        businessName: 'Moussa E2E',
+        businessType: 'courier',
+        contactName: 'Moussa E2E',
+        email: courierEmail,
+        phone: '+41791234567',
+        address: 'Rue de la Gare 1',
+        city: 'Annemasse',
+        country: 'France',
+        message: 'Vélo électrique',
+        consent: true,
+      },
+    });
+    expect(applied.status === 201 || applied.status === 200, `candidature ${applied.status} (${applied.json?.message})`);
+    const list = await call('GET', '/admin/partner-applications?limit=100', { token: state.admin.token });
+    const application = (list.json?.applications || []).find((item) => item.email === courierEmail);
+    expect(application, 'candidature livreur absente');
+    const invite = await call('POST', `/admin/partner-applications/${application._id}/invite`, { token: state.admin.token });
+    expectStatus(invite, 200, 'invitation : ');
+    const token = String(invite.json?.inviteUrl || '').split('token=')[1];
+    const password = strongPassword();
+    const created = await call('POST', `/partner-applications/invite/${token}/register`, {
+      body: { name: 'Moussa E2E', phone: '+41791234567', password },
+    });
+    expectStatus(created, 201, 'création : ');
+    expect(created.json?.role === 'livreur', `rôle ${created.json?.role}`);
+    state.newCourier = await login(courierEmail, 'livreur', password);
+  });
+
+  await step('nouveau livreur : aucune course tant que l’admin ne l’a pas vérifié', async () => {
+    expect(state.newCourier?.id, 'livreur non créé');
+    const created = await createOrder({ items: [{ menuItem: String(state.yassa._id), quantity: 1 }], total: Number(state.yassa.price) + 3 });
+    const orderId = orderIdOf(created.json);
+    const response = await call('PUT', `/orders/${orderId}/assign-driver`, {
+      token: state.owner.token,
+      body: { deliveryPerson: state.newCourier.id },
+    });
+    expect(response.status === 403 || response.status === 409, `attendu 403/409, reçu ${response.status}`);
+    return response.json?.code || '';
+  });
+
   finish();
 };
 

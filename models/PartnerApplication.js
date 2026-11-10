@@ -6,7 +6,8 @@ const partnerApplicationSchema = new mongoose.Schema(
     businessName: { type: String, required: true, trim: true, maxlength: 120 },
     businessType: {
       type: String,
-      enum: ['restaurant', 'grocery', 'shop', 'drinks', 'other'],
+      // « courier » : candidature de livreur (même parcours d'invitation, compte « livreur »).
+      enum: ['restaurant', 'grocery', 'shop', 'drinks', 'other', 'courier'],
       required: true,
     },
     contactName: { type: String, required: true, trim: true, maxlength: 120 },

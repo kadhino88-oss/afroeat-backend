@@ -159,3 +159,34 @@ test('mot de passe faible : refusé sans consommer le lien', async () => {
   assert.equal(res.statusCode, 400);
   assert.equal(consumed, false);
 });
+
+test('invitation de livreur : compte « livreur », non disponible et non vérifié tant que l’admin n’a pas validé', async () => {
+  const { token, tokenHash, expiresAt } = generateInviteToken();
+  const application = baseApp({ businessType: 'courier', inviteTokenHash: tokenHash, inviteExpiresAt: expiresAt });
+  stubInvite(application);
+  User.findOne = () => ({ select: async () => null });
+  PartnerApplication.findOneAndUpdate = async () => application;
+  PartnerApplication.updateOne = async () => ({});
+  let saved = null;
+  User.prototype.save = async function save() { saved = this; return this; };
+
+  const res = mockRes();
+  await registerFromInvite({ params: { token }, body: { name: 'Moussa Livreur', phone: '+41791234567', password: 'Motdepasse1!' } }, res);
+  assert.equal(res.statusCode, 201, JSON.stringify(res.body));
+  assert.equal(saved.role, 'livreur');
+  assert.equal(res.body.role, 'livreur');
+  assert.equal(saved.isAvailable, false);
+  assert.equal(saved.isIdentityVerified, false);
+  assert.equal(saved.isWorkAuthorized, false);
+  const { evaluateCourierAssignmentEligibility } = require('../utils/courierAssignmentEligibility');
+  assert.equal(evaluateCourierAssignmentEligibility(saved).ok, false);
+});
+
+test('« courier » est un type de candidature accepté', () => {
+  const { validateApplication } = require('../utils/partnerApplication');
+  const data = validateApplication({
+    businessName: 'Moussa Diallo', businessType: 'courier', contactName: 'Moussa Diallo',
+    email: 'moussa@example.com', phone: '+41791234567', address: 'Annemasse', city: 'Annemasse', consent: true,
+  });
+  assert.equal(data.businessType, 'courier');
+});
