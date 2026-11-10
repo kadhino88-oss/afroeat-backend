@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { geocodeAddress } = require('../utils/partnerRestaurant');
 
 const Restaurant = require('../models/Restaurant');
 const User = require('../models/User');
@@ -673,6 +674,28 @@ const updateRestaurant = async (req, res) => {
       return res.status(403).json({ success: false, message: "Vous n'avez pas accès à ce restaurant." });
     }
     const payload          = await buildUpdatePayload(req.body);
+
+    // « Placer mon restaurant à son adresse » : le serveur cherche la position de l'adresse.
+    if (req.body?.locateFromAddress === true) {
+      const point = await geocodeAddress(
+        payload.address ?? existingRestaurant.address,
+        payload.city ?? existingRestaurant.city,
+        payload.country ?? existingRestaurant.country
+      );
+      if (!point) {
+        return res.status(422).json({
+          success: false,
+          code: 'ADDRESS_NOT_FOUND',
+          message: "Adresse introuvable sur la carte. Vérifie l'adresse ou utilise ta position actuelle.",
+        });
+      }
+      payload.latitude = point.lat;
+      payload.longitude = point.lng;
+    }
+    if (Number.isFinite(payload.latitude) && Number.isFinite(payload.longitude)) {
+      payload.location = { latitude: payload.latitude, longitude: payload.longitude, updatedAt: new Date() };
+    }
+
     const updatedRestaurant = await populateRestaurantQuery(
       Restaurant.findByIdAndUpdate(id, payload, { new: true, runValidators: true })
     );
