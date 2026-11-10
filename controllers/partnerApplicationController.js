@@ -195,18 +195,22 @@ const registerFromInvite = async (req, res) => {
     );
     if (!claimed) return inviteError(res, 'INVITE_USED');
 
+    const isCourier = application.businessType === 'courier';
     const user = new User({
       name: data.name,
       email: application.email,
       password: data.password,
-      role: 'restaurant',
+      role: isCourier ? 'livreur' : 'restaurant',
       phone: data.phone,
       address: `${application.address}, ${application.city}`,
       country: application.country || 'Suisse',
       isIdentityVerified: false,
       isWorkAuthorized: false,
-      // L'équipe AFROEAT a déjà vérifié ce commerce avant d'envoyer l'invitation.
+      // L'équipe AFROEAT a déjà vérifié la candidature avant d'envoyer l'invitation.
+      // Un livreur ne reçoit aucune course tant que son identité et son autorisation de travail
+      // ne sont pas vérifiées par l'admin, et qu'il ne s'est pas déclaré disponible.
       accountStatus: 'active',
+      isAvailable: false,
     });
     await user.save();
 
@@ -216,6 +220,7 @@ const registerFromInvite = async (req, res) => {
       success: true,
       message: 'Compte créé. Tu peux maintenant te connecter.',
       email: application.email,
+      role: isCourier ? 'livreur' : 'restaurant',
     });
   } catch (error) {
     if (claimed) {
