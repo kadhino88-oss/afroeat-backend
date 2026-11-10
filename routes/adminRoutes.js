@@ -19,6 +19,7 @@ const {
 const {
   listApplications,
   updateApplication,
+  createInvite,
 } = require('../controllers/partnerApplicationController');
 
 const adminAuditRoutes = require('./adminAuditRoutes');
@@ -85,6 +86,7 @@ router.put('/users/:id/verification', updateAdminUserVerification);
  */
 router.get('/partner-applications', listApplications);
 router.put('/partner-applications/:id', updateApplication);
+router.post('/partner-applications/:id/invite', createInvite);
 
 /**
  * Restaurants
