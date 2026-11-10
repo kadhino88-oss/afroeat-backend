@@ -374,6 +374,15 @@ const buildUpdatePayload = async (reqBody = {}) => {
   if (reqBody.coverImage  !== undefined) payload.coverImage  = normalizeText(reqBody.coverImage);
   if (reqBody.currency    !== undefined) payload.currency    = normalizeText(reqBody.currency, 'EUR').toUpperCase();
   if (reqBody.deliveryFee !== undefined) payload.deliveryFee = normalizeNumber(reqBody.deliveryFee, 0);
+  if (reqBody.minimumOrderAmount !== undefined) {
+    payload.minimumOrderAmount = normalizeNumber(reqBody.minimumOrderAmount, 0);
+    if (!(payload.minimumOrderAmount >= 0) || payload.minimumOrderAmount > 1000) {
+      throw new Error('Le minimum de commande est invalide.');
+    }
+  }
+  if (payload.deliveryFee !== undefined && (!(payload.deliveryFee >= 0) || payload.deliveryFee > 1000)) {
+    throw new Error('Les frais de livraison sont invalides.');
+  }
   if (reqBody.isOpen      !== undefined) payload.isOpen      = normalizeBoolean(reqBody.isOpen, false);
   if (reqBody.autoAcceptOrders !== undefined) payload.autoAcceptOrders = normalizeBoolean(reqBody.autoAcceptOrders, false);
   if (reqBody.notificationsEnabled !== undefined) payload.notificationsEnabled = normalizeBoolean(reqBody.notificationsEnabled, true);
