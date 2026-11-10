@@ -1254,6 +1254,7 @@ const deleteOrder = async (req, res) => {
 
 module.exports = {
   canAccessOrder,
+  canTransitionStatus,
   getOrders,
   getOrdersByUser,
   getOrdersByRestaurant,
