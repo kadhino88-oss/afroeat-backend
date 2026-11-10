@@ -5,6 +5,7 @@
  * Aucune photo, aucun logo : seuls des textes. Le restaurant est marqué « TEST » dans son nom.
  */
 const TEST_OWNER_EMAIL = 'restaurant-test@afroeat.test';
+const TEST_COURIER_EMAIL = 'livreur-test@afroeat.test';
 
 const buildOwner = (password) => ({
   name: 'Propriétaire TEST',
@@ -17,6 +18,23 @@ const buildOwner = (password) => ({
   accountStatus: 'active',
   isIdentityVerified: true,
   isWorkAuthorized: true,
+});
+
+// Livreur de TEST : compte actif, identité et autorisation de travail « vérifiées », disponible,
+// pour pouvoir tester l'assignation et la livraison sans passer par la vérification réelle.
+const buildCourier = (password) => ({
+  name: 'Livreur TEST',
+  email: TEST_COURIER_EMAIL,
+  password,
+  role: 'livreur',
+  phone: '+41220000001',
+  address: 'Rue du Rhône 1, 1204 Genève',
+  country: 'Suisse',
+  accountStatus: 'active',
+  isIdentityVerified: true,
+  isWorkAuthorized: true,
+  isAvailable: true,
+  deliveryProfile: { vehicleType: 'Vélo' },
 });
 
 const buildRestaurant = (ownerId) => ({
@@ -50,4 +68,4 @@ const MENU = [
 const buildMenuItems = (restaurantId) =>
   MENU.map((item, index) => ({ ...item, restaurant: restaurantId, available: true, isPopular: index < 2 }));
 
-module.exports = { TEST_OWNER_EMAIL, buildOwner, buildRestaurant, buildMenuItems, MENU };
+module.exports = { TEST_OWNER_EMAIL, TEST_COURIER_EMAIL, buildOwner, buildCourier, buildRestaurant, buildMenuItems, MENU };

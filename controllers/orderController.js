@@ -1389,6 +1389,7 @@ const getOrderQuote = async (req, res) => {
 
 module.exports = {
   canAccessOrder,
+  canTransitionStatus,
   getOrders,
   getOrdersByUser,
   getOrdersByRestaurant,

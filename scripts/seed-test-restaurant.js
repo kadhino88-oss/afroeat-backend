@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const MenuItem = require('../models/MenuItem');
-const { TEST_OWNER_EMAIL, buildOwner, buildRestaurant, buildMenuItems } = require('../utils/testRestaurantSeed');
+const { TEST_OWNER_EMAIL, TEST_COURIER_EMAIL, buildOwner, buildCourier, buildRestaurant, buildMenuItems } = require('../utils/testRestaurantSeed');
 
 const main = async () => {
   if (String(process.env.AFROEAT_ENV || '').toLowerCase() !== 'staging') {
@@ -27,6 +27,14 @@ const main = async () => {
     console.log(`Compte propriétaire TEST créé : ${TEST_OWNER_EMAIL}`);
   } else {
     console.log(`Compte propriétaire TEST déjà présent : ${TEST_OWNER_EMAIL}`);
+  }
+
+  let courier = await User.findOne({ email: TEST_COURIER_EMAIL });
+  if (!courier) {
+    courier = await User.create(buildCourier(process.env.TEST_OWNER_PASSWORD));
+    console.log(`Compte livreur TEST créé : ${TEST_COURIER_EMAIL}`);
+  } else {
+    console.log(`Compte livreur TEST déjà présent : ${TEST_COURIER_EMAIL}`);
   }
 
   const restaurantDoc = buildRestaurant(owner._id);
