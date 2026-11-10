@@ -97,6 +97,15 @@ const createOrder = async ({ items, total, key = uuid() }) => {
   return response;
 };
 
+const finish = () => {
+  const failed = results.filter((result) => !result.ok);
+  console.log(`\n${results.length - failed.length}/${results.length} vérifications réussies.`);
+  if (failed.length) {
+    console.log(`À corriger : ${failed.map((result) => result.name).join(' | ')}`);
+    process.exit(1);
+  }
+};
+
 const main = async () => {
   console.log(`Test de bout en bout — ${API}\n`);
 
@@ -140,7 +149,7 @@ const main = async () => {
     expectStatus(created, 201, 'inscription : ');
     state.client = await login(email, 'client', state.clientPassword);
   });
-  if (!state.client || !state.restaurantId) return;
+  if (!state.client || !state.restaurantId) return finish();
 
   const items = [
     { menuItem: String(state.yassa._id), quantity: 1 },
@@ -172,7 +181,7 @@ const main = async () => {
     expect(order.paymentStatus === 'Non payé', `paiement ${order.paymentStatus}`);
     return `statut « ${order.status} »`;
   });
-  if (!state.orderId) return;
+  if (!state.orderId) return finish();
 
   await step('restaurant : se connecte et reçoit la commande', async () => {
     state.owner = await login('restaurant-test@afroeat.test', 'restaurant');
@@ -287,7 +296,7 @@ const main = async () => {
     expect(match, "lien d'invitation inattendu");
     state.inviteToken = match[1];
   });
-  if (!state.inviteToken) return;
+  if (!state.inviteToken) return finish();
 
   await step('page d’invitation : n’affiche que le nécessaire', async () => {
     const response = await call('GET', `/partner-applications/invite/${state.inviteToken}`);
@@ -321,12 +330,7 @@ const main = async () => {
     expect(response.json?.code === 'INVITE_USED', `code ${response.json?.code}`);
   });
 
-  const failed = results.filter((result) => !result.ok);
-  console.log(`\n${results.length - failed.length}/${results.length} vérifications réussies.`);
-  if (failed.length) {
-    console.log(`À corriger : ${failed.map((result) => result.name).join(' | ')}`);
-    process.exit(1);
-  }
+  finish();
 };
 
 main().catch((error) => {

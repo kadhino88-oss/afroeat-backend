@@ -394,7 +394,10 @@ const loginUser = async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || '');
-    const requestedRole = req.body?.role ? normalizeRole(req.body.role) : null;
+    // L'espace admin demande role=admin : sans ce cas, « admin » devenait « client » et la connexion
+    // d'un administrateur était refusée (403).
+    const rawRole = req.body?.role ? normalizeString(req.body.role).toLowerCase() : '';
+    const requestedRole = rawRole ? (rawRole === 'admin' ? 'admin' : normalizeRole(rawRole)) : null;
 
     if (!email || !password) {
       return res.status(400).json({
