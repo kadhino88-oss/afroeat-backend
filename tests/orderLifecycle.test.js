@@ -68,3 +68,11 @@ test('un livreur non vérifié ou indisponible ne reçoit pas de course', () => 
     assert.equal(evaluateCourierAssignmentEligibility(courier).ok, false, JSON.stringify(patch));
   }
 });
+
+test("l'admin de test est valide et distinct des autres comptes de test", () => {
+  const { buildAdmin, TEST_ADMIN_EMAIL, TEST_OWNER_EMAIL, TEST_COURIER_EMAIL } = require('../utils/testRestaurantSeed');
+  const admin = new User(buildAdmin('Test-Passw0rd!x'));
+  assert.equal(admin.validateSync(), undefined, String(admin.validateSync()));
+  assert.equal(admin.role, 'admin');
+  assert.equal(new Set([TEST_ADMIN_EMAIL, TEST_OWNER_EMAIL, TEST_COURIER_EMAIL]).size, 3);
+});

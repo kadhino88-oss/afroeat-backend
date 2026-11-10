@@ -6,6 +6,7 @@
  */
 const TEST_OWNER_EMAIL = 'restaurant-test@afroeat.test';
 const TEST_COURIER_EMAIL = 'livreur-test@afroeat.test';
+const TEST_ADMIN_EMAIL = 'admin-test@afroeat.test';
 
 const buildOwner = (password) => ({
   name: 'Propriétaire TEST',
@@ -35,6 +36,20 @@ const buildCourier = (password) => ({
   isWorkAuthorized: true,
   isAvailable: true,
   deliveryProfile: { vehicleType: 'Vélo' },
+});
+
+// Administrateur de TEST : sert à valider l'invitation des partenaires sur l'environnement de test.
+const buildAdmin = (password) => ({
+  name: 'Admin TEST',
+  email: TEST_ADMIN_EMAIL,
+  password,
+  role: 'admin',
+  phone: '+41220000002',
+  address: 'Rue du Rhône 1, 1204 Genève',
+  country: 'Suisse',
+  accountStatus: 'active',
+  isIdentityVerified: true,
+  isWorkAuthorized: true,
 });
 
 const buildRestaurant = (ownerId) => ({
@@ -68,4 +83,4 @@ const MENU = [
 const buildMenuItems = (restaurantId) =>
   MENU.map((item, index) => ({ ...item, restaurant: restaurantId, available: true, isPopular: index < 2 }));
 
-module.exports = { TEST_OWNER_EMAIL, TEST_COURIER_EMAIL, buildOwner, buildCourier, buildRestaurant, buildMenuItems, MENU };
+module.exports = { TEST_OWNER_EMAIL, TEST_COURIER_EMAIL, TEST_ADMIN_EMAIL, buildOwner, buildCourier, buildAdmin, buildRestaurant, buildMenuItems, MENU };
