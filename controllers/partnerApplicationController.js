@@ -1,6 +1,14 @@
 'use strict';
 
 const PartnerApplication = require('../models/PartnerApplication');
+const User = require('../models/User');
+const {
+  INVITE_MESSAGES,
+  generateInviteToken,
+  hashInviteToken,
+  getInviteState,
+  validateInviteRegistration,
+} = require('../utils/partnerInvite');
 const { validateApplication, STATUSES } = require('../utils/partnerApplication');
 
 const createApplication = async (req, res) => {
@@ -43,7 +51,7 @@ const listApplications = async (req, res) => {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
 
     const [items, total] = await Promise.all([
-      PartnerApplication.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      PartnerApplication.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).select('-inviteTokenHash').lean(),
       PartnerApplication.countDocuments(filter),
     ]);
 
@@ -75,4 +83,154 @@ const updateApplication = async (req, res) => {
   }
 };
 
-module.exports = { createApplication, listApplications, updateApplication };
+const publicWebBase = () => {
+  const raw = String(process.env.PUBLIC_WEB_URL || '').split(',')[0].trim().replace(/\/+$/, '');
+  return /^https?:\/\//.test(raw) ? raw : '';
+};
+
+const INVITE_PROJECTION = '+inviteTokenHash';
+
+/**
+ * ADMIN — génère un lien d'invitation à usage unique (valable 7 jours).
+ * Le partenaire y crée lui-même son compte et choisit son mot de passe : personne d'autre ne le connaît.
+ */
+const createInvite = async (req, res) => {
+  try {
+    const base = publicWebBase();
+    if (!base) {
+      return res.status(503).json({ success: false, message: "PUBLIC_WEB_URL n'est pas configurée." });
+    }
+
+    const application = await PartnerApplication.findById(req.params.id);
+    if (!application) return res.status(404).json({ success: false, message: 'Demande introuvable.' });
+    if (application.status === 'rejected') {
+      return res.status(409).json({ success: false, message: 'Cette demande a été refusée.' });
+    }
+    if (application.inviteUsedAt) {
+      return res.status(409).json({ success: false, message: 'Le compte de ce partenaire a déjà été créé.' });
+    }
+    if (await User.findOne({ email: application.email }).select('_id')) {
+      return res.status(409).json({ success: false, message: 'Un compte existe déjà avec cette adresse e-mail.' });
+    }
+
+    const { token, tokenHash, expiresAt } = generateInviteToken();
+    application.inviteTokenHash = tokenHash;
+    application.inviteExpiresAt = expiresAt;
+    application.inviteUsedAt = null;
+    application.status = 'approved';
+    await application.save();
+
+    return res.json({
+      success: true,
+      inviteUrl: `${base}/auth/invite?token=${token}`,
+      expiresAt,
+    });
+  } catch (error) {
+    console.error('Partner invite error:', error.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+};
+
+const findInvitedApplication = async (token) => {
+  const value = String(token || '');
+  if (!/^[a-f0-9]{64}$/.test(value)) return null;
+  return PartnerApplication.findOne({ inviteTokenHash: hashInviteToken(value) }).select(INVITE_PROJECTION);
+};
+
+const inviteError = (res, code) =>
+  res.status(code === 'INVITE_INVALID' ? 404 : 410).json({
+    success: false,
+    code,
+    message: INVITE_MESSAGES[code] || INVITE_MESSAGES.INVITE_INVALID,
+  });
+
+/** PUBLIC — ce que la page d'invitation affiche (aucune donnée sensible). */
+const getInvite = async (req, res) => {
+  try {
+    const application = await findInvitedApplication(req.params.token);
+    const state = getInviteState(application);
+    if (!state.ok) return inviteError(res, state.code);
+
+    return res.json({
+      success: true,
+      invite: {
+        businessName: application.businessName,
+        businessType: application.businessType,
+        email: application.email,
+        contactName: application.contactName,
+        phone: application.phone,
+        expiresAt: application.inviteExpiresAt,
+      },
+    });
+  } catch (error) {
+    console.error('Get invite error:', error.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+};
+
+/** PUBLIC — le partenaire crée son compte et choisit son mot de passe. */
+const registerFromInvite = async (req, res) => {
+  let claimed = null;
+  try {
+    const application = await findInvitedApplication(req.params.token);
+    const state = getInviteState(application);
+    if (!state.ok) return inviteError(res, state.code);
+
+    let data;
+    try {
+      data = validateInviteRegistration(req.body);
+    } catch (validationError) {
+      return res.status(400).json({ success: false, message: validationError.message });
+    }
+
+    if (await User.findOne({ email: application.email }).select('_id')) {
+      return res.status(409).json({ success: false, message: 'Un compte existe déjà avec cette adresse e-mail.' });
+    }
+
+    // On « consomme » l'invitation avant de créer le compte : deux envois simultanés ne créent qu'un compte.
+    claimed = await PartnerApplication.findOneAndUpdate(
+      { _id: application._id, inviteUsedAt: null },
+      { inviteUsedAt: new Date() },
+      { new: true }
+    );
+    if (!claimed) return inviteError(res, 'INVITE_USED');
+
+    const user = new User({
+      name: data.name,
+      email: application.email,
+      password: data.password,
+      role: 'restaurant',
+      phone: data.phone,
+      address: `${application.address}, ${application.city}`,
+      country: application.country || 'Suisse',
+      isIdentityVerified: false,
+      isWorkAuthorized: false,
+      // L'équipe AFROEAT a déjà vérifié ce commerce avant d'envoyer l'invitation.
+      accountStatus: 'active',
+    });
+    await user.save();
+
+    await PartnerApplication.updateOne({ _id: application._id }, { accountUser: user._id });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Compte créé. Tu peux maintenant te connecter.',
+      email: application.email,
+    });
+  } catch (error) {
+    if (claimed) {
+      await PartnerApplication.updateOne({ _id: claimed._id }, { inviteUsedAt: null }).catch(() => {});
+    }
+    console.error('Register from invite error:', error.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+};
+
+module.exports = {
+  createApplication,
+  listApplications,
+  updateApplication,
+  createInvite,
+  getInvite,
+  registerFromInvite,
+};

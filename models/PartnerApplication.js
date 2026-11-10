@@ -26,6 +26,11 @@ const partnerApplicationSchema = new mongoose.Schema(
       index: true,
     },
     adminNote: { type: String, trim: true, maxlength: 1000, default: '' },
+    // Invitation : seule l'empreinte du jeton est stockée (jamais le jeton lui-même).
+    inviteTokenHash: { type: String, default: '', index: true },
+    inviteExpiresAt: { type: Date, default: null },
+    inviteUsedAt: { type: Date, default: null },
+    accountUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true }
 );
