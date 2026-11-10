@@ -12,6 +12,7 @@ const {
   getOrdersByRestaurant,
   getOrderById,
   createOrder,
+  getOrderQuote,
   updateOrderStatus,
   assignDriverToOrder,
   getOrderTracking,
@@ -122,6 +123,7 @@ router.get('/:id', protect, canAccessOrder, getOrderById);
  * - client
  * - admin
  */
+router.post('/quote', protect, allowRoles('client', 'admin'), getOrderQuote);
 router.post('/', protect, allowRoles('client', 'admin'), createOrder);
 
 /**
