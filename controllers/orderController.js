@@ -817,6 +817,24 @@ const createOrder = async (req, res) => {
       });
     }
 
+    // Le client affiche un devis avant de valider : si le serveur recalcule autre chose
+    // (prix modifié, frais de livraison changés), on refuse et on lui renvoie le nouveau devis.
+    if (req.body?.quotedTotal !== undefined && req.body?.quotedTotal !== null) {
+      const quotedTotal = Number(req.body.quotedTotal);
+      const quotedCurrency = String(req.body.quotedCurrency || pricing.currency).trim().toUpperCase();
+      if (
+        !Number.isFinite(quotedTotal) ||
+        Math.abs(quotedTotal - pricing.totalPrice) > 0.005 ||
+        quotedCurrency !== pricing.currency
+      ) {
+        return res.status(409).json({
+          success: false,
+          code: 'QUOTE_CHANGED',
+          message: 'Le montant de la commande a changé. Vérifie le nouveau total.',
+        });
+      }
+    }
+
     let marketplaceRates;
     try {
       marketplaceRates = getMarketplaceRates(pricing.currency);
@@ -1252,6 +1270,123 @@ const deleteOrder = async (req, res) => {
   }
 };
 
+/**
+ * POST /orders/quote
+ * Calcule le devis (articles, livraison, total) à partir des prix du serveur.
+ * Ne crée aucune commande et ne dépend pas du verrou de production.
+ */
+const getOrderQuote = async (req, res) => {
+  try {
+    const { restaurant, items } = req.body || {};
+
+    if (!restaurant || !isValidObjectId(restaurant)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_RESTAURANT_ID',
+        message: 'ID restaurant invalide.',
+      });
+    }
+
+    const requestedResult = normalizeRequestedOrderItems(items, isValidObjectId);
+    if (!requestedResult.ok) {
+      return res.status(400).json({
+        success: false,
+        code: requestedResult.code,
+        message: requestedResult.message,
+      });
+    }
+
+    const restaurantDoc = await Restaurant.findById(restaurant).select(
+      '_id currency deliveryFee minimumOrderAmount isActive isOpen'
+    );
+
+    if (!restaurantDoc) {
+      return res.status(404).json({
+        success: false,
+        code: 'RESTAURANT_NOT_FOUND',
+        message: 'Restaurant introuvable.',
+      });
+    }
+
+    if (restaurantDoc.isActive === false) {
+      return res.status(409).json({
+        success: false,
+        code: 'RESTAURANT_INACTIVE',
+        message: 'Ce restaurant ne prend pas de commandes pour le moment.',
+      });
+    }
+
+    if (restaurantDoc.isOpen === false) {
+      return res.status(409).json({
+        success: false,
+        code: 'RESTAURANT_CLOSED',
+        message: 'Ce restaurant est actuellement fermé.',
+      });
+    }
+
+    const menuItems = await MenuItem.find({
+      _id: { $in: requestedResult.menuItemIds },
+      restaurant: restaurantDoc._id,
+      available: { $ne: false },
+    })
+      .select('_id restaurant name price image available')
+      .lean();
+
+    const trusted = buildTrustedOrderItems({
+      requestedItems: requestedResult.items,
+      menuItems,
+      restaurantId: restaurantDoc._id,
+    });
+
+    if (!trusted.ok) {
+      return res.status(trusted.code === 'MENU_ITEM_UNAVAILABLE' ? 409 : 400).json({
+        success: false,
+        code: trusted.code,
+        message: trusted.message,
+      });
+    }
+
+    const pricing = calculateRestaurantPricing({ items: trusted.items, restaurant: restaurantDoc });
+
+    if (!pricing.ok) {
+      return res.status(pricing.code === 'MINIMUM_ORDER_NOT_MET' ? 409 : 400).json({
+        success: false,
+        code: pricing.code,
+        message: pricing.message,
+        ...(pricing.subtotal !== undefined ? { subtotal: pricing.subtotal } : {}),
+        ...(pricing.minimumOrderAmount !== undefined
+          ? { minimumOrderAmount: pricing.minimumOrderAmount }
+          : {}),
+        ...(pricing.currency ? { currency: pricing.currency } : {}),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      quote: {
+        restaurant: String(restaurantDoc._id),
+        items: trusted.items.map((item) => ({
+          menuItem: item.menuItem,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          image: item.image,
+        })),
+        itemsSubtotal: pricing.subtotal,
+        deliveryFee: pricing.deliveryFee,
+        totalPrice: pricing.totalPrice,
+        currency: pricing.currency,
+      },
+    });
+  } catch (error) {
+    console.error('AFROEAT ORDER QUOTE ERROR =>', error?.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Impossible de calculer le devis pour le moment.',
+    });
+  }
+};
+
 module.exports = {
   canAccessOrder,
   getOrders,
@@ -1259,6 +1394,7 @@ module.exports = {
   getOrdersByRestaurant,
   getOrderById,
   createOrder,
+  getOrderQuote,
   updateOrderStatus,
   assignDriverToOrder,
   getOrderTracking,
