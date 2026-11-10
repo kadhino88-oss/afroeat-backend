@@ -2,6 +2,8 @@
 
 const PartnerApplication = require('../models/PartnerApplication');
 const User = require('../models/User');
+const Restaurant = require('../models/Restaurant');
+const { buildRestaurantFromApplication, geocodeAddress } = require('../utils/partnerRestaurant');
 const {
   INVITE_MESSAGES,
   generateInviteToken,
@@ -216,11 +218,24 @@ const registerFromInvite = async (req, res) => {
 
     await PartnerApplication.updateOne({ _id: application._id }, { accountUser: user._id });
 
+    // Restaurant : sa fiche est créée tout de suite (fermée), pour qu'il n'arrive pas sur un espace vide.
+    let restaurantCreated = false;
+    if (!isCourier) {
+      try {
+        const point = await geocodeAddress(application.address, application.city, application.country);
+        await Restaurant.create(buildRestaurantFromApplication(application, user._id, point));
+        restaurantCreated = true;
+      } catch (restaurantError) {
+        console.error('Partner restaurant creation error:', restaurantError.message);
+      }
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Compte créé. Tu peux maintenant te connecter.',
       email: application.email,
       role: isCourier ? 'livreur' : 'restaurant',
+      restaurantCreated,
     });
   } catch (error) {
     if (claimed) {

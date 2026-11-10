@@ -190,3 +190,51 @@ test('« courier » est un type de candidature accepté', () => {
   });
   assert.equal(data.businessType, 'courier');
 });
+
+test('restaurant invité : sa fiche restaurant est créée (fermée, devise du pays, position si trouvée)', async () => {
+  const Restaurant = require('../models/Restaurant');
+  const { buildRestaurantFromApplication, currencyFor } = require('../utils/partnerRestaurant');
+  const ownerId = new mongoose.Types.ObjectId();
+  const doc = buildRestaurantFromApplication(baseApp({ businessType: 'other', country: 'France' }), ownerId, { lat: 46.19, lng: 6.23 });
+  assert.equal(doc.businessType, 'shop');
+  assert.equal(doc.currency, 'EUR');
+  assert.equal(doc.isOpen, false);
+  assert.equal(doc.location.latitude, 46.19);
+  assert.equal(new Restaurant(doc).validateSync(), undefined, String(new Restaurant(doc).validateSync()));
+  assert.equal(currencyFor('Suisse'), 'CHF');
+  assert.equal(currencyFor(''), 'CHF');
+  const noPoint = buildRestaurantFromApplication(baseApp(), ownerId, null);
+  assert.equal(noPoint.location, undefined);
+  assert.equal(new Restaurant(noPoint).validateSync(), undefined);
+});
+
+test("l'inscription par invitation crée le restaurant ; un échec de création ne bloque pas le compte", async () => {
+  const Restaurant = require('../models/Restaurant');
+  const { token, tokenHash, expiresAt } = generateInviteToken();
+  const application = baseApp({ inviteTokenHash: tokenHash, inviteExpiresAt: expiresAt });
+  stubInvite(application);
+  User.findOne = () => ({ select: async () => null });
+  PartnerApplication.findOneAndUpdate = async () => application;
+  PartnerApplication.updateOne = async () => ({});
+  User.prototype.save = async function save() { return this; };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => [{ lat: '46.2', lon: '6.14' }] });
+  let created = null;
+  Restaurant.create = async (doc) => { created = doc; return doc; };
+  let res = mockRes();
+  await registerFromInvite({ params: { token }, body: { name: 'Awa Diop', phone: '+41791234567', password: 'Motdepasse1!' } }, res);
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.body.restaurantCreated, true);
+  assert.equal(created.name, 'Chez Maman Afrik');
+  assert.equal(created.latitude, 46.2);
+
+  const again = generateInviteToken();
+  stubInvite(baseApp({ inviteTokenHash: again.tokenHash, inviteExpiresAt: again.expiresAt }));
+  PartnerApplication.findOneAndUpdate = async () => ({});
+  Restaurant.create = async () => { throw new Error('boom'); };
+  res = mockRes();
+  await registerFromInvite({ params: { token: again.token }, body: { name: 'Awa Diop', phone: '+41791234567', password: 'Motdepasse1!' } }, res);
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.body.restaurantCreated, false);
+  globalThis.fetch = originalFetch;
+});

@@ -195,6 +195,12 @@ const userSchema = new mongoose.Schema(
       },
     },
 
+    // Restaurants favoris du client (page « Favoris »).
+    favoriteRestaurants: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant' }],
+      default: [],
+    },
+
     deliveryProfile: {
       vehicleType: {
         type: String,

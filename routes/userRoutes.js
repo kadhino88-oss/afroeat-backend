@@ -45,6 +45,12 @@ router.post('/login', loginUser);
 router.get('/me', protect, getMe);
 router.put('/me', protect, updateMe);
 
+// Favoris du client
+const { listFavorites, addFavorite, removeFavorite } = require('../controllers/favoriteController');
+router.get('/me/favorites', protect, allowRoles('client'), listFavorites);
+router.put('/me/favorites/:id', protect, allowRoles('client'), addFavorite);
+router.delete('/me/favorites/:id', protect, allowRoles('client'), removeFavorite);
+
 /**
  * =========================================================
  * DRIVERS DIRECTORY
