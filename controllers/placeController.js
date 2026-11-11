@@ -54,7 +54,11 @@ const handler = (kind) => async (req, res) => {
     });
   } catch (error) {
     console.error('Places nearby error:', error.message);
-    return res.status(502).json({ success: false, message: 'Service de lieux temporairement indisponible.', detail: error.detail || error.message });
+    // Service externe indisponible et base vide : on répond une liste vide (200) plutôt qu'une erreur,
+    // pour que l'écran ne casse pas. `degraded` permet à l'appli d'afficher un message au besoin.
+    res.set('Cache-Control', 'no-store');
+    const empty = { success: true, degraded: true, radiusKm, count: 0, total: 0, hasMore: false };
+    return res.json(kind === 'groceries' ? { ...empty, groceries: [] } : { ...empty, restaurants: [], fastFoods: [] });
   }
 };
 
