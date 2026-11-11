@@ -1,4 +1,6 @@
 const jwt = require('jsonwebtoken');
+const { sendMail } = require('../utils/mailer');
+const { generateResetToken, hashResetToken, isValidResetToken, resetLink, resetEmail } = require('../utils/passwordReset');
 const User = require('../models/User');
 
 const allowedRoles = ['client', 'restaurant', 'livreur'];
@@ -518,6 +520,77 @@ const changePassword = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/users/forgot-password — { email }
+ * Réponse identique que le compte existe ou non (pas de fuite d'adresses).
+ */
+const forgotPassword = async (req, res) => {
+  const generic = {
+    success: true,
+    message: 'Si un compte correspond à cette adresse, un e-mail de réinitialisation vient d’être envoyé.',
+  };
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!isValidEmail(email)) return res.json(generic);
+
+    const user = await User.findOne({ email }).select('name email accountStatus');
+    if (!user || user.accountStatus === 'suspended') return res.json(generic);
+
+    const { token, tokenHash, expiresAt } = generateResetToken();
+    await User.updateOne(
+      { _id: user._id },
+      { $set: { passwordResetTokenHash: tokenHash, passwordResetExpires: expiresAt } }
+    );
+
+    const mail = resetEmail(user.name, resetLink(token));
+    const result = await sendMail({ to: user.email, ...mail });
+    if (!result.sent) console.error('Reset password mail not sent:', result.reason);
+    return res.json(generic);
+  } catch (error) {
+    console.error('Forgot password error:', error.message);
+    return res.json(generic);
+  }
+};
+
+/** POST /api/users/reset-password — { token, password } (jeton à usage unique, 1 h). */
+const resetPassword = async (req, res) => {
+  try {
+    const token = String(req.body?.token || '');
+    const password = String(req.body?.password || '');
+
+    if (!isValidResetToken(token)) {
+      return res.status(400).json({ success: false, code: 'RESET_INVALID', message: 'Lien invalide ou expiré.' });
+    }
+    if (!isStrongPassword(password)) {
+      return res.status(422).json({
+        success: false,
+        code: 'PASSWORD_WEAK',
+        message:
+          'Le mot de passe doit contenir au moins 8 caractères avec une majuscule, une minuscule, un chiffre et un caractère spécial.',
+      });
+    }
+
+    // Consommation atomique : le jeton ne sert qu'une fois, même en cas de requêtes simultanées.
+    const user = await User.findOneAndUpdate(
+      { passwordResetTokenHash: hashResetToken(token), passwordResetExpires: { $gt: new Date() } },
+      { $set: { passwordResetTokenHash: '', passwordResetExpires: null } },
+      { new: false }
+    ).select('_id');
+    if (!user) {
+      return res.status(400).json({ success: false, code: 'RESET_INVALID', message: 'Lien invalide ou expiré.' });
+    }
+
+    const doc = await User.findById(user._id).select('+password');
+    doc.password = password;
+    await doc.save();
+
+    return res.json({ success: true, message: 'Mot de passe modifié. Tu peux te connecter.' });
+  } catch (error) {
+    console.error('Reset password error:', error.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
@@ -690,6 +763,8 @@ module.exports = {
   loginUser,
   getMe,
   changePassword,
+  forgotPassword,
+  resetPassword,
   updateMe,
   getDrivers,
   protect,
