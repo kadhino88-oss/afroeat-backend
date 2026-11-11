@@ -10,6 +10,7 @@ const {
   loginUser,
   getMe,
   updateMe,
+  changePassword,
   getDrivers,
 } = require('../controllers/userController');
 
@@ -44,6 +45,7 @@ router.post('/login', loginUser);
  */
 router.get('/me', protect, getMe);
 router.put('/me', protect, updateMe);
+router.put('/me/password', protect, changePassword);
 
 // Favoris du client
 const { listFavorites, addFavorite, removeFavorite } = require('../controllers/favoriteController');
