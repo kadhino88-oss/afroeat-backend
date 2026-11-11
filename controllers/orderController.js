@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { isRestaurantOpenNow } = require('../utils/openingHours');
 const {
   normalizeIdempotencyKey,
   createOrderRequestFingerprint,
@@ -718,7 +719,7 @@ const createOrder = async (req, res) => {
     }
 
     const restaurantExists = await Restaurant.findById(restaurant).select(
-      '_id owner latitude longitude location address city country currency deliveryFee minimumOrderAmount isActive isOpen'
+      '_id owner latitude longitude location address city country currency deliveryFee minimumOrderAmount isActive isOpen openingHours'
     );
 
     if (!restaurantExists) {
@@ -737,7 +738,7 @@ const createOrder = async (req, res) => {
       });
     }
 
-    if (restaurantExists.isOpen === false) {
+    if (!isRestaurantOpenNow(restaurantExists)) {
       return res.status(409).json({
         success: false,
         code: 'RESTAURANT_CLOSED',
@@ -1297,7 +1298,7 @@ const getOrderQuote = async (req, res) => {
     }
 
     const restaurantDoc = await Restaurant.findById(restaurant).select(
-      '_id currency deliveryFee minimumOrderAmount isActive isOpen'
+      '_id currency deliveryFee minimumOrderAmount isActive isOpen openingHours'
     );
 
     if (!restaurantDoc) {
@@ -1316,7 +1317,7 @@ const getOrderQuote = async (req, res) => {
       });
     }
 
-    if (restaurantDoc.isOpen === false) {
+    if (!isRestaurantOpenNow(restaurantDoc)) {
       return res.status(409).json({
         success: false,
         code: 'RESTAURANT_CLOSED',

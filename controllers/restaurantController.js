@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeOpeningHours } = require('../utils/openingHours');
 const { geocodeAddress } = require('../utils/partnerRestaurant');
 
 const Restaurant = require('../models/Restaurant');
@@ -374,6 +375,11 @@ const buildUpdatePayload = async (reqBody = {}) => {
   if (reqBody.image       !== undefined) payload.image       = normalizeText(reqBody.image);
   if (reqBody.coverImage  !== undefined) payload.coverImage  = normalizeText(reqBody.coverImage);
   if (reqBody.currency    !== undefined) payload.currency    = normalizeText(reqBody.currency, 'EUR').toUpperCase();
+  if (reqBody.openingHours !== undefined) {
+    const hours = normalizeOpeningHours(reqBody.openingHours);
+    if (hours.error) throw new Error(hours.error);
+    payload.openingHours = hours.value;
+  }
   if (reqBody.deliveryFee !== undefined) payload.deliveryFee = normalizeNumber(reqBody.deliveryFee, 0);
   if (reqBody.minimumOrderAmount !== undefined) {
     payload.minimumOrderAmount = normalizeNumber(reqBody.minimumOrderAmount, 0);
