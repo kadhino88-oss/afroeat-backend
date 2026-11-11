@@ -12,6 +12,29 @@ après les contrôles ci-dessous.
 - Parcours des statuts : restaurant (préparation), livreur (prise en charge, livraison), blocage de la
   livraison tant que le paiement n'est pas confirmé (`tests/orderLifecycle.test.js`).
 
+- Compte restaurant et livreur par invitation (le partenaire choisit son mot de passe), vérification des livreurs par l'admin.
+- Photos des plats, logo et couverture envoyés depuis l'appli (`POST /api/images`).
+- Horaires d'ouverture hebdomadaires appliqués au devis et à la commande.
+- Changement de mot de passe, gains du livreur dans la devise de la commande.
+- Test de bout en bout automatique (`e2e-test-env`) : 25 contrôles, client / restaurant / livreur / admin.
+
+## 0 bis. E-mail (mot de passe oublié) : à configurer avant l'ouverture
+
+Le parcours « Mot de passe oublié » est prêt mais **n'envoie rien tant qu'un service d'e-mail n'est pas configuré**
+(sans configuration, l'API répond normalement et n'expose aucune erreur).
+
+- [ ] Créer un compte [Resend](https://resend.com) (ou équivalent) et **vérifier le domaine d'envoi** (SPF / DKIM).
+- [ ] Dans Vercel (projet API de production, variables « Sensitive ») : `RESEND_API_KEY` et `MAIL_FROM`
+      (ex. `AfroEat <no-reply@votre-domaine>`).
+- [ ] Définir `PUBLIC_WEB_URL` (adresse publique du site, utilisée dans le lien reçu par e-mail).
+- [ ] Tester : demander une réinitialisation avec un compte de test et vérifier la réception.
+
+## 0 ter. Données de la production
+
+- [ ] Lancer « Importer les lieux OpenStreetMap » et « Importer les commerces africains saisis à la main » sur la base de production
+      (l'environnement de test n'a pas ces lieux, c'est normal ; l'API répond une liste vide plutôt qu'une erreur).
+- [ ] Inviter les vrais restaurants depuis l'écran admin « Candidatures partenaires » (« Approuver et inviter »).
+
 ## 1. Stripe (à faire par le titulaire du compte, dans le tableau de bord Stripe)
 
 - [ ] Activer le compte Stripe en **mode live** (informations de l'entreprise, compte bancaire, pièce d'identité du représentant).
