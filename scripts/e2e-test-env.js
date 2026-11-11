@@ -259,6 +259,17 @@ const main = async () => {
     expect(response.status === 403, `attendu 403, reçu ${response.status}`);
   });
 
+  await step('livreur : ses gains incluent cette livraison (sa part, pas le total)', async () => {
+    const response = await call('GET', '/delivery/earnings', { token: state.courier.token });
+    expectStatus(response, 200);
+    const mine = (response.json?.earnings || []).find((item) => String(item.id || item._id) === String(state.orderId));
+    expect(Boolean(mine), 'livraison absente des gains');
+    expect(mine.currency === 'CHF', `devise ${mine.currency}`);
+    expect(Number(mine.amount) > 0, `gain nul (${mine.amount}) : taux livreur non configurés ?`);
+    expect(Number(mine.amount) < Number(mine.orderAmount), 'le gain ne doit pas égaler le total de la commande');
+    return `${mine.amount} ${mine.currency} sur ${mine.orderAmount}`;
+  });
+
   await step('paiement par carte : session Stripe créée (sans payer)', async () => {
     const created = await createOrder({ items: [{ menuItem: String(state.yassa._id), quantity: 1 }], total: Number(state.yassa.price) + 3 });
     expect(created.status === 201 || created.status === 200, `commande ${created.status}`);
