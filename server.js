@@ -308,6 +308,7 @@ app.use('/api/restaurants', require('./routes/restaurantRoutes'));
 app.use('/api/places', require('./routes/placeRoutes'));
 app.use('/api/partner-applications', require('./routes/partnerApplicationRoutes'));
 app.use('/api/menu', require('./routes/menuRoutes'));
+app.use('/api/images', require('./routes/imageRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/delivery', require('./routes/deliveryRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
