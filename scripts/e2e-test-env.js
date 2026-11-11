@@ -110,8 +110,16 @@ const main = async () => {
   console.log(`Test de bout en bout — ${API}\n`);
 
   await step('API en ligne, base de test connectée', async () => {
-    const response = await fetch(API.replace(/\/api$/, '/health'));
-    const json = await response.json();
+    // Le premier appel après une période d'inactivité peut tomber pendant la reconnexion à la base :
+    // trois essais espacés avant de conclure à une vraie panne.
+    let response;
+    let json;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      response = await fetch(API.replace(/\/api$/, '/health'));
+      json = await response.json().catch(() => ({}));
+      if (response.status === 200) break;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 4000));
+    }
     expect(response.status === 200, `santé ${response.status}`);
     expect(json?.database?.connected === true, 'base non connectée');
     expect(json?.database?.name === 'afroeat_test', `mauvaise base : ${json?.database?.name}`);
