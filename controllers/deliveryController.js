@@ -811,8 +811,8 @@ const getDeliveryOverview = async (req, res) => {
         deliveryPerson: driver._id,
         status: 'Livrée',
       }).select(
-        'deliveryFee driverFee driverEarning deliveryEarning total totalAmount totalPrice pricing totals summary'
-      ),
+        'currency deliveryFee driverFee driverEarning deliveryEarning total totalAmount totalPrice pricing totals summary'
+      ).sort({ updatedAt: -1 }),
     ]);
 
     const totalEarnings = roundMoney(
@@ -829,6 +829,7 @@ const getDeliveryOverview = async (req, res) => {
         activeOrders: active,
         deliveredOrders: delivered,
         totalEarnings,
+        currency: String(deliveredOrders[0]?.currency || 'EUR').toUpperCase(),
         isAvailable: Boolean(driver.isAvailable),
       },
     });
@@ -857,7 +858,7 @@ const getMyDeliveryEarnings = async (req, res) => {
       status: 'Livrée',
     })
       .select(
-        '_id status createdAt updatedAt deliveryFee driverFee driverEarning deliveryEarning total totalAmount totalPrice pricing totals summary'
+        '_id status currency createdAt updatedAt deliveryFee driverFee driverEarning deliveryEarning total totalAmount totalPrice pricing totals summary'
       )
       .sort({ updatedAt: -1, createdAt: -1 });
 
@@ -867,6 +868,7 @@ const getMyDeliveryEarnings = async (req, res) => {
       status: order.status || '',
       amount: inferDriverEarningFromOrder(order),
       orderAmount: inferOrderAmount(order),
+      currency: String(order.currency || 'EUR').toUpperCase(),
       createdAt: order.createdAt || null,
       updatedAt: order.updatedAt || null,
     }));
@@ -879,6 +881,7 @@ const getMyDeliveryEarnings = async (req, res) => {
       success: true,
       count: items.length,
       totalEarnings,
+      currency: items[0]?.currency || 'EUR',
       earnings: items,
     });
   } catch (error) {
