@@ -11,6 +11,8 @@ const {
   getMe,
   updateMe,
   changePassword,
+  forgotPassword,
+  resetPassword,
   getDrivers,
 } = require('../controllers/userController');
 
@@ -32,6 +34,8 @@ const {
  */
 router.post('/register', registerUser);
 router.post('/login', loginUser);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 /**
  * =========================================================

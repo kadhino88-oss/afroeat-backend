@@ -195,6 +195,10 @@ const userSchema = new mongoose.Schema(
       },
     },
 
+    // Réinitialisation du mot de passe : seul le hash du jeton est conservé.
+    passwordResetTokenHash: { type: String, default: '', select: false, index: true },
+    passwordResetExpires: { type: Date, default: null, select: false },
+
     // Restaurants favoris du client (page « Favoris »).
     favoriteRestaurants: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant' }],
