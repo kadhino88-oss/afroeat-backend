@@ -461,6 +461,63 @@ const loginUser = async (req, res) => {
   }
 };
 
+/**
+ * PUT /api/users/me/password — { currentPassword, newPassword }
+ * Le mot de passe actuel est exigé : un jeton volé ne suffit pas à prendre le compte.
+ */
+const changePassword = async (req, res) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        code: 'PASSWORD_REQUIRED',
+        message: 'Le mot de passe actuel et le nouveau mot de passe sont obligatoires.',
+      });
+    }
+
+    if (!isStrongPassword(newPassword)) {
+      return res.status(422).json({
+        success: false,
+        code: 'PASSWORD_WEAK',
+        message:
+          'Le nouveau mot de passe doit contenir au moins 8 caractères avec une majuscule, une minuscule, un chiffre et un caractère spécial.',
+      });
+    }
+
+    if (newPassword === currentPassword) {
+      return res.status(422).json({
+        success: false,
+        code: 'PASSWORD_SAME',
+        message: 'Le nouveau mot de passe doit être différent de l’ancien.',
+      });
+    }
+
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur introuvable' });
+    }
+
+    if (!(await user.matchPassword(currentPassword))) {
+      return res.status(401).json({
+        success: false,
+        code: 'PASSWORD_INCORRECT',
+        message: 'Le mot de passe actuel est incorrect.',
+      });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    return res.json({ success: true, message: 'Mot de passe modifié.' });
+  } catch (error) {
+    console.error('Change password error:', error.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
@@ -632,6 +689,7 @@ module.exports = {
   validateRegistrationPayload,
   loginUser,
   getMe,
+  changePassword,
   updateMe,
   getDrivers,
   protect,
