@@ -13,6 +13,27 @@ const {
 } = require('../utils/partnerInvite');
 const { validateApplication, STATUSES } = require('../utils/partnerApplication');
 
+const mailer = require('../utils/mailer');
+const { adminNewApplicationEmail, applicantConfirmationEmail, inviteEmail } = require('../utils/partnerMails');
+
+/**
+ * Prévient l'équipe (PARTNER_NOTIFY_EMAIL) et accuse réception au candidat.
+ * Un échec d'envoi n'empêche jamais l'enregistrement de la candidature.
+ */
+const notifyNewApplication = async (data) => {
+  try {
+    const base = publicWebBase();
+    const adminTo = String(process.env.PARTNER_NOTIFY_EMAIL || '').trim();
+    const jobs = [mailer.sendMail({ to: data.email, ...applicantConfirmationEmail(data) })];
+    if (adminTo) {
+      jobs.push(mailer.sendMail({ to: adminTo, ...adminNewApplicationEmail(data, base ? `${base}/admin/partner-applications` : '') }));
+    }
+    await Promise.allSettled(jobs);
+  } catch (error) {
+    console.error('Partner application mail error:', error.message);
+  }
+};
+
 const createApplication = async (req, res) => {
   try {
     // Champ piège invisible : un robot le remplit, un humain non. On répond « OK » sans rien enregistrer.
@@ -34,6 +55,7 @@ const createApplication = async (req, res) => {
     }
 
     await PartnerApplication.create(data);
+    await notifyNewApplication(data);
     return res.status(201).json({ success: true, message: 'Demande reçue. Nous te contactons très vite.' });
   } catch (error) {
     const isValidation = /obligatoire|invalide|commencer par/.test(error.message || '');
@@ -122,11 +144,17 @@ const createInvite = async (req, res) => {
     application.status = 'approved';
     await application.save();
 
-    return res.json({
-      success: true,
-      inviteUrl: `${base}/auth/invite?token=${token}`,
-      expiresAt,
-    });
+    const inviteUrl = `${base}/auth/invite?token=${token}`;
+    // Si l'e-mail est configuré, le lien part directement chez le candidat (en plus de l'affichage admin).
+    let emailSent = false;
+    try {
+      const result = await mailer.sendMail({ to: application.email, ...inviteEmail(application, inviteUrl, expiresAt) });
+      emailSent = Boolean(result?.sent);
+    } catch (error) {
+      console.error('Partner invite mail error:', error.message);
+    }
+
+    return res.json({ success: true, inviteUrl, expiresAt, emailSent });
   } catch (error) {
     console.error('Partner invite error:', error.message);
     return res.status(500).json({ success: false, message: 'Erreur serveur.' });
