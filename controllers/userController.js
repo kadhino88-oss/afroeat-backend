@@ -433,7 +433,8 @@ const loginUser = async (req, res) => {
       });
     }
 
-    if (requestedRole && user.role !== requestedRole) {
+    // Un administrateur se connecte depuis n'importe quelle page de connexion (pas de lien spécial).
+    if (requestedRole && user.role !== requestedRole && user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: `Ce compte appartient à l’espace ${user.role}, pas à l’espace ${requestedRole}`,
