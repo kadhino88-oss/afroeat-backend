@@ -359,6 +359,41 @@ const createCheckoutSession = async (req, res) => {
     const webBase = req.body?.platform === 'web' ? resolveReturnBase(req.body?.returnUrl) : null;
     const returnBase = webBase || `${appScheme}:/`;
 
+    // Nouvelle tentative (le client est revenu de Stripe sans payer) : on réutilise la page
+    // de paiement encore ouverte au lieu d'en recréer une.
+    if (order.stripeCheckoutSessionId) {
+      try {
+        const existing = await stripe.checkout.sessions.retrieve(order.stripeCheckoutSessionId);
+        if (existing?.status === 'complete' && existing?.payment_status === 'paid') {
+          return res.status(409).json({
+            success: false,
+            code: 'ORDER_ALREADY_PAID',
+            message: 'Cette commande est déjà payée.',
+          });
+        }
+        if (existing?.status === 'open' && existing?.url) {
+          return res.status(200).json({
+            success: true,
+            url: existing.url,
+            sessionId: existing.id,
+            amount,
+            currency: currency.toLowerCase(),
+            fallbackSuccessUrl: `${publicWebUrl}/payment/success?orderId=${order._id}`,
+          });
+        }
+      } catch (lookupError) {
+        console.error('CHECKOUT SESSION LOOKUP ERROR =>', lookupError?.message);
+      }
+    }
+
+    // La clé d'idempotence doit correspondre à des paramètres identiques : l'échéance est donc
+    // arrondie à la minute et la clé change à chaque minute et à chaque nouvelle tentative.
+    const minuteBucket = Math.floor(Date.now() / 60000);
+    const attemptTag = order.stripeCheckoutSessionId
+      ? order.stripeCheckoutSessionId.slice(-12)
+      : 'first';
+    const platformTag = webBase ? 'web' : 'app';
+
     const session = await stripe.checkout.sessions.create(
       {
         mode: 'payment',
@@ -398,10 +433,10 @@ const createCheckoutSession = async (req, res) => {
             },
           },
         ],
-        expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+        expires_at: minuteBucket * 60 + 31 * 60,
       },
       {
-        idempotencyKey: `checkout_session_${order._id}_${req.user._id}`,
+        idempotencyKey: `checkout_session_${order._id}_${req.user._id}_${platformTag}_${attemptTag}_${minuteBucket}`,
       }
     );
 
