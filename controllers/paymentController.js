@@ -17,7 +17,11 @@ const {
 const { handleConnectedAccountUpdated } = require('./connectController');
 const { evaluatePaymentChannel } = require('../utils/paymentChannel');
 const { getOrderPaymentCreationBlock } = require('../utils/orderPaymentGuard');
-const { isProductionLocked } = require('../utils/runtimeEnvironment');
+const {
+  isProductionLocked,
+  isRealProduction,
+  isLiveCommerceOpen,
+} = require('../utils/runtimeEnvironment');
 const { resolveReturnBase } = require('./savedCardController');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -57,8 +61,9 @@ const getMinAmount = (currency) => {
 const hasStripeTestSecret = () =>
   /^(sk|rk)_test_/.test(String(process.env.STRIPE_SECRET_KEY || ''));
 
-const canCreateDevelopmentCardPayment = () =>
-  !isProductionLocked() && Boolean(stripe) && hasStripeTestSecret();
+// Carte : clé de TEST hors production réelle, ou clé réelle une fois le commerce ouvert.
+const canCreateCardPayment = () =>
+  !isProductionLocked() && Boolean(stripe) && (hasStripeTestSecret() || isLiveCommerceOpen());
 
 const stripeUnavailable = (res) =>
   res.status(503).json({
@@ -211,7 +216,7 @@ const createPaymentIntent = async (req, res) => {
       });
     }
 
-    if (!canCreateDevelopmentCardPayment()) return stripeTestKeyRequired(res);
+    if (!canCreateCardPayment()) return stripeTestKeyRequired(res);
 
     const currency = normalizeString(order.currency, 'EUR').toUpperCase();
     const amount = getOrderAmount(order);
@@ -322,7 +327,7 @@ const createCheckoutSession = async (req, res) => {
       });
     }
 
-    if (!canCreateDevelopmentCardPayment()) return stripeUnavailable(res);
+    if (!canCreateCardPayment()) return stripeUnavailable(res);
 
     const currency = normalizeString(order.currency, 'EUR').toUpperCase();
     const amount = getOrderAmount(order);
@@ -741,23 +746,20 @@ const handleWebhook = async (req, res) => {
 };
 
 const getAvailablePaymentMethods = (req, res) => {
-  const isProduction = isProductionLocked();
-
   return res.status(200).json({
     success: true,
     methods: {
-      // Production remains fail-closed until Connect, approved splits and
-      // payout reconciliation are implemented and reviewed.
-      card: !isProduction && Boolean(stripe) && hasStripeTestSecret(),
-      // Cash remains unavailable in production until collection and
+      // Fermé tant que le commerce réel n'est pas ouvert et entièrement configuré.
+      card: canCreateCardPayment(),
+      // Cash remains unavailable in real production until collection and
       // settlement reconciliation are implemented.
-      cash: !isProduction,
+      cash: !isRealProduction(),
     },
   });
 };
 
 const selectCashPayment = async (req, res) => {
-  if (isProductionLocked()) {
+  if (isRealProduction()) {
     return res.status(503).json({
       success: false,
       code: 'CASH_ON_DELIVERY_DISABLED',

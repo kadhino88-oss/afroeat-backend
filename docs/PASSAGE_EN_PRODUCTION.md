@@ -78,3 +78,10 @@ Le parcours « Mot de passe oublié » est prêt mais **n'envoie rien tant qu'un
 > Le verrou lui-même (`isProductionLocked`) ne doit être modifié qu'après validation écrite des points 1 à 4,
 > dans un changement de code relu, avec un test qui prouve que l'ouverture reste impossible sans les
 > variables de configuration attendues.
+
+## Ouverture du commerce réel
+
+Les commandes et paiements par carte réels s'ouvrent avec la variable `AFROEAT_LIVE_COMMERCE=open` sur l'API officielle,
+à condition que la clé Stripe soit réelle, que `STRIPE_WEBHOOK_SECRET` et `MARKETPLACE_RATES_JSON` soient renseignés.
+Si un élément manque, tout reste verrouillé. Pour refermer : supprimer la variable puis redéployer.
+Le paiement à la livraison reste désactivé en production réelle.
