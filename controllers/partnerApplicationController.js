@@ -28,7 +28,11 @@ const notifyNewApplication = async (data) => {
     if (adminTo) {
       jobs.push(mailer.sendMail({ to: adminTo, ...adminNewApplicationEmail(data, base ? `${base}/admin/partner-applications` : '') }));
     }
-    await Promise.allSettled(jobs);
+    const results = await Promise.allSettled(jobs);
+    results.forEach((result, index) => {
+      const reason = result.status === 'rejected' ? result.reason?.message : result.value?.sent ? '' : result.value?.reason;
+      if (reason) console.error(`Partner mail not sent (${index === 0 ? 'candidat' : 'équipe'}): ${reason}`);
+    });
   } catch (error) {
     console.error('Partner application mail error:', error.message);
   }
@@ -150,6 +154,7 @@ const createInvite = async (req, res) => {
     try {
       const result = await mailer.sendMail({ to: application.email, ...inviteEmail(application, inviteUrl, expiresAt) });
       emailSent = Boolean(result?.sent);
+      if (!emailSent) console.error(`Partner invite mail not sent: ${result?.reason || 'inconnu'}`);
     } catch (error) {
       console.error('Partner invite mail error:', error.message);
     }
