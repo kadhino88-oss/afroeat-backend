@@ -1,7 +1,7 @@
 name: Donner le rôle administrateur à un compte existant
 
 # Bouton manuel, réservé aux personnes qui ont les droits d'écriture sur le dépôt.
-# Cible la base de l'API officielle (secret STAGING_MONGO_URI). Le mot de passe n'est pas modifié :
+# Cible la base de l'API officielle (secret PLACES_MONGO_URI, même base que l'API). Le mot de passe n'est pas modifié :
 # le propriétaire du compte le définit ensuite avec « Mot de passe oublié ».
 on:
   workflow_dispatch:
@@ -29,11 +29,11 @@ jobs:
         run: npm ci
       - name: Passer le compte administrateur
         env:
-          MONGO_URI: ${{ secrets.STAGING_MONGO_URI }}
+          MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
           USER_ID: ${{ inputs.user_id }}
         run: |
           if [ -z "$MONGO_URI" ]; then
-            echo "::error::Le secret STAGING_MONGO_URI est absent."
+            echo "::error::Le secret PLACES_MONGO_URI est absent."
             exit 1
           fi
           node scripts/promote-admin.js
