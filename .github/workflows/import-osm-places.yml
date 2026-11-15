@@ -1,7 +1,7 @@
 name: Importer les lieux OpenStreetMap
 
 # Bouton manuel (onglet « Actions » → « Run workflow »), utilisable depuis un téléphone.
-# Pour chaque région : télécharge Geofabrik, extrait restaurants / fast-foods / épiceries
+# Pour chaque région : télécharge Geofabrik, extrait restaurants / fast-foods / épiceries / autres commerces
 # et les enregistre dans la base MongoDB utilisée par l'API (secret PLACES_MONGO_URI).
 on:
   workflow_dispatch:
@@ -65,6 +65,8 @@ jobs:
             osmium tags-filter region.osm.pbf \
               nwr/amenity=restaurant,fast_food \
               nwr/shop=supermarket,convenience,greengrocer,general,grocery,deli \
+              nwr/shop=clothes,fabric,tailor,boutique,shoes,jewelry,beauty,cosmetics,hairdresser,hairdresser_supply,butcher,bakery,seafood,variety_store,wholesale,spices,market \
+              nwr/amenity=marketplace \
               -o places.osm.pbf
             osmium export places.osm.pbf -f geojsonseq --add-unique-id=type_id --geometry-types=point,polygon -o places.geojsonseq
             node scripts/import-osm-places.js places.geojsonseq "$REGION"
