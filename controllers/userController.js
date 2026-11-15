@@ -392,6 +392,8 @@ const registerUser = async (req, res) => {
   }
 };
 
+const { isAdminOriginAllowed } = require('../utils/adminOrigin');
+
 const loginUser = async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email);
@@ -444,6 +446,15 @@ const loginUser = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: 'Ce compte est suspendu.',
+      });
+    }
+
+    // Un administrateur ne se connecte que depuis l'adresse dédiée à l'administration :
+    // ailleurs, la réponse est la même que pour un compte inconnu.
+    if (user.role === 'admin' && !isAdminOriginAllowed(req.headers?.origin)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur introuvable',
       });
     }
 
