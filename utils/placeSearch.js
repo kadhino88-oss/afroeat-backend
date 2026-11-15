@@ -1,6 +1,7 @@
 'use strict';
 
 const Place = require('../models/Place');
+const { SALON_SHOPS } = require('./osmPlaces');
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 3000;
 
@@ -12,7 +13,7 @@ const toApi = (doc) => {
     source: 'openstreetmap',
     // Catégories attendues par l'appli : restaurant, african-fast-food, african-grocery.
     category: doc.kind === 'shop'
-      ? 'african-shop'
+      ? (SALON_SHOPS.has(doc.subtype) ? 'african-salon' : 'african-business')
       : isGrocery
       ? 'african-grocery'
       : doc.kind === 'fast_food' && doc.isAfrican ? 'african-fast-food' : 'restaurant',
