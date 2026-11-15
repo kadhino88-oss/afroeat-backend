@@ -212,6 +212,7 @@ const protect = async (req, res, next) => {
         'address',
         'profileImage',
         'accountStatus',
+        'passwordChangedAt',
         'isIdentityVerified',
         'isWorkAuthorized',
         'isAvailable',
@@ -235,6 +236,14 @@ const protect = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'Utilisateur introuvable.',
+      });
+    }
+
+    // Session ouverte avant le dernier changement de mot de passe : refusée.
+    if (user.passwordChangedAt && decoded.iat && decoded.iat < Math.floor(user.passwordChangedAt.getTime() / 1000)) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session expirée, reconnecte-toi.',
       });
     }
 

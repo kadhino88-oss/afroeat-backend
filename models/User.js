@@ -9,6 +9,7 @@ const ALLOWED_ACCOUNT_STATUSES = [
   'active',
   'suspended',
   'rejected',
+  'deleted',
 ];
 
 const normalizeString = (value) => String(value || '').trim();
@@ -110,6 +111,9 @@ const userSchema = new mongoose.Schema(
     stripeConnectTransfersEnabled: { type: Boolean, default: false },
     stripeConnectPayoutsEnabled: { type: Boolean, default: false },
     stripeConnectRequirementsDueCount: { type: Number, default: 0, min: 0 },
+
+    passwordChangedAt: { type: Date, default: null },
+    deletedAt: { type: Date, default: null },
 
     pushToken: {
       type: String,
@@ -346,6 +350,8 @@ userSchema.pre('save', async function () {
     if (this.isModified('password')) {
       const salt = await bcrypt.genSalt(12);
       this.password = await bcrypt.hash(this.password, salt);
+      // Invalide les sessions ouvertes avant ce changement de mot de passe.
+      if (!this.isNew) this.passwordChangedAt = new Date();
     }
 
     this.name = normalizeString(this.name);

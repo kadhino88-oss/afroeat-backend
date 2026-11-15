@@ -5,6 +5,8 @@ const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
 
+const { deleteMyAccount, exportMyData, accountDeletionPage } = require('../controllers/accountController');
+
 const {
   registerUser,
   loginUser,
@@ -47,7 +49,10 @@ router.post('/reset-password', resetPassword);
  *
  * Accessible à tout utilisateur authentifié.
  */
+router.get('/account-deletion', accountDeletionPage);
 router.get('/me', protect, getMe);
+router.get('/me/export', protect, exportMyData);
+router.delete('/me/account', protect, deleteMyAccount);
 router.put('/me', protect, updateMe);
 router.put('/me/password', protect, changePassword);
 
