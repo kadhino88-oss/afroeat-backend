@@ -5,7 +5,23 @@
 const NON_AFRICAN_CUISINE_RE = /\b(japanese|thai|chinese|korean|vietnamese|indian|italian|turkish|greek|mexican|sushi|ramen|pizza_only)\b/i;
 const AFRICAN_CUISINE_RE = /afri|senegal|ivor|camerou|congol|nigeria|ghana|ethiop|eritre|somali|moroc|alger|tunis|egypt|couscous|tajine|mafe|yassa|attieke/i;
 
+// Restauration rapide halal (kebab, tacos, burger, sandwich, poulet…) : majoritairement tenue par des commerçants
+// nord-africains. OpenStreetMap n'indique pas l'origine du gérant : ce signal « halal + fast-food » sert de proxy.
+const FASTFOOD_WORDS_RE = /\b(kebabs?|kebaps?|d[oö]ner|shawarma|tacos|french[ _]tacos|burgers?|sandwich(?:es)?|chicken|poulet|grill|snack|wraps?|panini|kebab)\b/i;
+const TURKISH_RE = /turk|t[uü]rk/i;
+
+const isHalalFastFood = (tags) => {
+  const kind = String(tags.amenity || '');
+  if (kind !== 'fast_food' && kind !== 'restaurant') return false;
+  const halalTag = ['yes', 'only'].includes(String(tags['diet:halal'] || '').toLowerCase());
+  const halalName = /halal/i.test(tags.name || '');
+  if (!halalTag && !halalName) return false;
+  if (TURKISH_RE.test(String(tags.cuisine || ''))) return false;
+  return FASTFOOD_WORDS_RE.test(`${tags.cuisine || ''} ${tags.name || ''}`);
+};
+
 const isAfricanPlace = (tags) => {
+  if (isHalalFastFood(tags)) return true;
   const text = [tags.name, tags.cuisine, tags.brand, tags.operator, tags.description].join(' ');
   if (!AFRICAN_RE.test(text)) return false;
   const cuisine = String(tags.cuisine || '');
@@ -96,4 +112,4 @@ const featureToPlace = (feature, region = '') => {
   };
 };
 
-module.exports = { isAfricanPlace, featureToPlace, centroid, AFRICAN_RE, OTHER_SHOPS, GROCERY_SHOPS, SALON_SHOPS };
+module.exports = { isHalalFastFood, isAfricanPlace, featureToPlace, centroid, AFRICAN_RE, OTHER_SHOPS, GROCERY_SHOPS, SALON_SHOPS };
