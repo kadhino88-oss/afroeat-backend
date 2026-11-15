@@ -95,3 +95,38 @@ d'identité du responsable et un extrait du registre du commerce. L'administrate
   Ne jamais la changer une fois des documents envoyés (ils deviendraient illisibles) et ne jamais la partager.
 - Les fichiers sont chiffrés (AES-256-GCM), lus uniquement depuis l'administration, et chaque consultation est tracée.
 - Effacement automatique : 90 jours sans décision, 30 jours après la décision. Seule la décision est conservée.
+
+## Double authentification de l'administrateur
+
+Optionnelle, à activer depuis l'administration : **Sécurité du compte → Activer la double authentification**.
+Un code à 6 chiffres (Google Authenticator, Microsoft Authenticator, 1Password…) est alors demandé à chaque connexion.
+
+- 8 codes de secours sont affichés **une seule fois** à l'activation : les conserver hors ligne (gestionnaire de mots de passe, papier).
+- Le secret est chiffré avec `DOCUMENT_ENCRYPTION_KEY`. Perdre cette clé rend les secrets illisibles.
+- Perte du téléphone : utiliser un code de secours (chacun ne sert qu'une fois), puis réactiver avec un nouvel appareil.
+- Perte du téléphone **et** des codes : désactiver le champ `twoFactor.enabled` du compte directement en base (accès Atlas requis), puis se reconnecter et réactiver.
+- 10 tentatives de code par 15 minutes et par adresse ; un code déjà utilisé est refusé (anti-rejeu).
+
+## Annulations, remboursements et commandes sans suite
+
+- Une commande payée par carte puis annulée est **remboursée automatiquement** (Stripe, opération idempotente). Un échec est
+  conservé dans `refundError` de la commande : relancer le remboursement depuis le tableau de bord Stripe.
+- Une commande payée que le restaurant n'accepte pas sous `ORDER_ACCEPT_TIMEOUT_MIN` minutes (15 par défaut) est annulée et remboursée.
+  Un paiement non finalisé après `ORDER_UNPAID_TIMEOUT_MIN` minutes (60 par défaut) est annulé.
+- Ces contrôles se déclenchent quand les applications consultent leurs listes de commandes (au plus une fois par minute) ;
+  l'administrateur peut aussi les lancer : `POST /api/admin/ops/expire-stale-orders`.
+
+## Données personnelles
+
+- Suppression de compte depuis l'application (Profil → Confidentialité) : le compte est anonymisé, les pièces justificatives et le
+  client Stripe sont supprimés, les commandes sont conservées sans identité (obligation comptable). Refusée tant qu'une commande est en cours.
+- Export des données : `GET /api/users/me/export` (copie JSON du profil, des commandes et des demandes d'assistance).
+- Page publique de suppression pour les boutiques d'applications : `/api/users/account-deletion`.
+- Après un changement de mot de passe, toutes les sessions ouvertes auparavant sont refusées.
+
+## Cartes et commerces africains
+
+Les lieux proviennent d'OpenStreetMap, importés par le workflow « Importer les lieux OpenStreetMap » (régions Geofabrik).
+Régions importées à ce jour : Suisse, Rhône-Alpes, Auvergne. Pour couvrir une autre zone, relancer le workflow avec la région voulue
+(ex. `europe/france/ile-de-france`). OpenStreetMap n'indique pas l'origine des gérants : la détection repose sur le nom, la cuisine et
+les plats ; un commerce non détecté peut s'inscrire lui-même (candidature partenaire) ou être ajouté par l'administration.
