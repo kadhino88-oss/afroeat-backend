@@ -355,6 +355,8 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
+    refundRequestedAt: { type: Date, default: null },
+    refundError: { type: String, default: '', trim: true, maxlength: 300 },
     refundedAt: {
       type: Date,
       default: null,

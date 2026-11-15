@@ -16,6 +16,23 @@ const {
 } = require('../utils/orderPricing');
 
 const { sendPushToUser } = require('../utils/pushNotifications');
+const { refundCancelledOrder } = require('../utils/orderRefund');
+const { maybeExpireStaleOrders } = require('../utils/staleOrders');
+
+const stripeClient = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+
+// Annule (et rembourse) les commandes sans suite à l'occasion des consultations de listes.
+const expireStaleOrdersOpportunistically = () =>
+  maybeExpireStaleOrders({
+    Order,
+    stripe: stripeClient,
+    notify: async (order) =>
+      sendPushToUser(order.user, {
+        title: 'Afroeat',
+        body: 'Ta commande a été annulée car le restaurant n’a pas répondu. Tu es remboursé automatiquement.',
+        data: { orderId: String(order._id), type: 'order_status', status: 'Annulée' },
+      }).catch(() => {}),
+  });
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 const { getMarketplaceRates } = require('../config/marketplaceRates');
 const { calculateMarketplaceSplit } = require('../utils/marketplaceAccounting');
@@ -505,6 +522,7 @@ const getOrders = async (req, res) => {
 
 const getOrdersByUser = async (req, res) => {
   try {
+    await expireStaleOrdersOpportunistically();
     const { userId } = req.params;
 
     if (!isValidObjectId(userId)) {
@@ -537,6 +555,7 @@ const getOrdersByUser = async (req, res) => {
 
 const getOrdersByRestaurant = async (req, res) => {
   try {
+    await expireStaleOrdersOpportunistically();
     const { restaurantId } = req.params;
 
     if (!isValidObjectId(restaurantId)) {
@@ -1031,6 +1050,18 @@ const updateOrderStatus = async (req, res) => {
       } catch (payoutError) {
         // Delivery remains saved; payout reconciliation is retried through admin endpoints.
         console.error('AFROEAT PAYOUT RECONCILIATION ERROR =>', payoutError?.message);
+      }
+    }
+
+    if (nextStatus === 'Annulée') {
+      // Commande payée par carte puis annulée : remboursement immédiat.
+      const refund = await refundCancelledOrder(order, stripeClient);
+      if (refund.refunded) {
+        sendPushToUser(order.user, {
+          title: 'Afroeat',
+          body: 'Ta commande est annulée. Le remboursement est en cours (quelques jours selon ta banque).',
+          data: { orderId: String(order._id), type: 'order_status', status: 'Annulée' },
+        }).catch(() => {});
       }
     }
 
