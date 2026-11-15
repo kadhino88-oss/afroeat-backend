@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 
 const { protect } = require('../controllers/userController');
+const { requireAdminOrigin } = require('../utils/adminOrigin');
 const {
   getAdminDashboard,
   getAdminUsers,
@@ -67,6 +68,8 @@ const requireAdmin = (req, res, next) => {
  */
 router.use(protect);
 router.use(requireAdmin);
+// En production, l'API d'administration ne répond qu'à l'adresse dédiée à l'administration.
+router.use(requireAdminOrigin);
 
 /**
  * Dashboard
