@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 
@@ -16,6 +17,8 @@ const {
   forgotPassword,
   resetPassword,
   getDrivers,
+  generateToken,
+  formatUser,
 } = require('../controllers/userController');
 
 /**
@@ -35,7 +38,15 @@ const {
  * =========================================================
  */
 router.post('/register', registerUser);
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 10 : 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Trop de tentatives. Réessaie dans quelques minutes.' },
+});
 router.post('/login', loginUser);
+router.post('/login/2fa', loginLimiter, require('../controllers/twoFactorController').completeLogin(generateToken, formatUser));
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 

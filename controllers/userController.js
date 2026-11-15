@@ -130,6 +130,8 @@ const formatDriver = (user) => ({
   createdAt: user.createdAt || null,
 });
 
+const { signChallenge } = require('./twoFactorController');
+
 const generateToken = (user) => {
   return jwt.sign(
     {
@@ -458,6 +460,16 @@ const loginUser = async (req, res) => {
       });
     }
 
+    // Administrateur avec double authentification : pas de session avant le second facteur.
+    if (user.role === 'admin' && user.twoFactor?.enabled) {
+      return res.status(200).json({
+        success: true,
+        requires2FA: true,
+        challengeToken: signChallenge(user),
+        message: 'Code de vérification requis',
+      });
+    }
+
     const token = generateToken(user);
 
     return res.status(200).json({
@@ -779,4 +791,6 @@ module.exports = {
   updateMe,
   getDrivers,
   protect,
+  generateToken,
+  formatUser,
 };

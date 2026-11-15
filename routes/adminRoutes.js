@@ -76,6 +76,13 @@ router.use(requireAdmin);
 // En production, l'API d'administration ne répond qu'à l'adresse dédiée à l'administration.
 router.use(requireAdminOrigin);
 
+// Double authentification de l'administrateur connecté.
+const twoFactor = require('../controllers/twoFactorController');
+router.get('/2fa/status', twoFactor.status);
+router.post('/2fa/setup', twoFactor.setup);
+router.post('/2fa/enable', twoFactor.enable);
+router.post('/2fa/disable', twoFactor.disable);
+
 /**
  * Dashboard
  */
