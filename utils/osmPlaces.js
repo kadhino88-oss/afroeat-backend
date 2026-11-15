@@ -1,19 +1,33 @@
 'use strict';
 
+// Cuisines explicitement non africaines : si le lieu en déclare une (sans cuisine africaine),
+// un nom qui ressemble à un pays d'Afrique (ex. « Mali Pizza », « Wakara ») ne suffit pas.
+const NON_AFRICAN_CUISINE_RE = /\b(japanese|thai|chinese|korean|vietnamese|indian|italian|turkish|greek|mexican|sushi|ramen|pizza_only)\b/i;
+const AFRICAN_CUISINE_RE = /afri|senegal|ivor|camerou|congol|nigeria|ghana|ethiop|eritre|somali|moroc|alger|tunis|egypt|couscous|tajine|mafe|yassa|attieke/i;
+
+const isAfricanPlace = (tags) => {
+  const text = [tags.name, tags.cuisine, tags.brand, tags.operator, tags.description].join(' ');
+  if (!AFRICAN_RE.test(text)) return false;
+  const cuisine = String(tags.cuisine || '');
+  if (NON_AFRICAN_CUISINE_RE.test(cuisine) && !AFRICAN_CUISINE_RE.test(cuisine)) return false;
+  return true;
+};
+
 // Un lieu est « africain » si son nom, sa cuisine, sa marque ou sa description évoque l'Afrique
 // (pays, nationalités, plats typiques, boutiques « exotic / afro »).
 const AFRICAN_RE = new RegExp(
   [
     'afri', 'afro(?!d)', 'exotic', 'tropic', 'antill', 'cara[iï]b',
     's[ée]n[ée]gal', 'ivoir', "cote d'?ivoire", 'c[oô]te d.?ivoire', 'camerou', 'congo', 'nigeria', 'ghana',
-    'mali\\b', 'malien', 'guin[ée]', 'togo', 'b[ée]nin', 'burkina', 'gabon', 'tchad', 'niger\\b',
+    '\\bmali\\b', 'malien', 'guin[ée]', '\\btogo\\b', 'b[ée]nin', 'burkina', '\\bgabon', 'tchad', 'niger\\b',
     'ethiop', '[ée]rythr', 'somali', 'kenya', 'ugand', 'tanzan', 'rwanda', 'burundi', 'angola',
     'mozambi', 'zambi', 'zimbab', 'madagas', 'mauritan', 'mauritius', 'sierra leone', 'liberia', 'gambia', 'gambie', 'cap.?vert', 'cabo verde',
     'maroc', 'moroc', 'alg[ée]r', 'tunis', 'egypt', '[ée]gypt', 'liby', 'sudan', 'comor',
     'afrique du sud', 'south africa', 'namibi', 'botswan', 'malawi', 'lesotho', 'eswatini', 'swazi', 'djibouti',
     '[ée]quatorial', 'sao tom', 's[aã]o tom', 'seychell', 'maghreb', 'sahel', 'kabyl', 'berb[eè]re', 'touareg',
     'wolof', 'peul\\b', 'bambara', 'yoruba', 'igbo', 'hausa\\b', 'swahili', 'zulu', 'amhar', 'lingala', 'kinois', 'abidjan', 'dakar', 'douala', 'kinshasa', 'brazzaville', 'lagos', 'accra',
-    'poulet dg', 'garba', 'placali', 'saka.?saka', 'pondu', 'liboke', 'chikwangue', 'ugali', 'nyama choma', 'braai', 'bunny chow', 'egusi', 'amala', 'akara', 'waakye', 'kelewele', 'banku', 'peri.?peri', 'piri.?piri', 'shawarma africain',
+    'poulet dg', 'garba', 'placali', 'saka.?saka', 'pondu', 'liboke', 'chikwangue', 'ugali', 'nyama choma', 'braai', 'bunny chow', 'egusi', 'amala', '\\bakara\\b', 'waakye', 'kelewele', 'banku', 'peri.?peri', 'piri.?piri', 'shawarma africain',
+    'poulet\\s+brais', 'brais[ée]s?\\s+(poulet|poisson)', 'tchep', 'dibi', 'soya', 'd[eè]gu[eè]', 'tacos? afri', 'burgers? afri',
     'yassa', 'maf[ée]', 'thi[eé]b', 'attieke', 'attiék', 'alloco', 'kedjenou', 'ndol[ée]', 'foufou', 'fufu', 'foutou',
     'injera', 'suya', 'jollof', 'couscous', 'tajine', 'tagine', 'bissap', 'gnamakoudji', 'kandia',
   ].join('|'),
@@ -76,10 +90,10 @@ const featureToPlace = (feature, region = '') => {
     phone: tags.phone || tags['contact:phone'] || '',
     website: tags.website || tags['contact:website'] || '',
     openingHours: tags.opening_hours || '',
-    isAfrican: AFRICAN_RE.test(text),
+    isAfrican: isAfricanPlace(tags),
     location: { type: 'Point', coordinates: [point[0], point[1]] },
     region,
   };
 };
 
-module.exports = { featureToPlace, centroid, AFRICAN_RE, OTHER_SHOPS, GROCERY_SHOPS, SALON_SHOPS };
+module.exports = { isAfricanPlace, featureToPlace, centroid, AFRICAN_RE, OTHER_SHOPS, GROCERY_SHOPS, SALON_SHOPS };

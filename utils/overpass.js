@@ -12,7 +12,7 @@ const MAX_RESULTS = 500;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const cache = new Map();
 
-const { AFRICAN_RE, GROCERY_SHOPS, SALON_SHOPS } = require('./osmPlaces');
+const { isAfricanPlace, GROCERY_SHOPS, SALON_SHOPS } = require('./osmPlaces');
 
 const toRad = (d) => (d * Math.PI) / 180;
 const distanceKm = (lat1, lon1, lat2, lon2) => {
@@ -50,8 +50,7 @@ const normalizeElement = (el, kind, lat, lng) => {
   if (!Number.isFinite(pLat) || !Number.isFinite(pLng)) return null;
   const street = [tags['addr:housenumber'], tags['addr:street']].filter(Boolean).join(' ');
   const city = tags['addr:city'] || '';
-  const text = [tags.name, tags.cuisine, tags.brand, tags.operator, tags.description].join(' ');
-  const isAfrican = AFRICAN_RE.test(text);
+  const isAfrican = isAfricanPlace(tags);
   return {
     id: `osm-${el.type}-${el.id}`,
     source: 'openstreetmap',

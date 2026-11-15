@@ -113,3 +113,15 @@ test('sous-type du commerce conservé pour distinguer salons et autres commerces
   const f = { id: 'node/10', properties: { shop: 'hairdresser', name: 'Afro Hair' }, geometry: { type: 'Point', coordinates: [6.1, 46.2] } };
   assert.equal(featureToPlace(f).subtype, 'hairdresser');
 });
+
+test('faux africains écartés, vrais fast-foods africains conservés', () => {
+  const pt3 = (tags) => ({ id: 'node/11', properties: tags, geometry: { type: 'Point', coordinates: [6.1, 46.2] } });
+  assert.equal(featureToPlace(pt3({ amenity: 'fast_food', name: 'Mali Pizza & Kebap', cuisine: 'pizza;turkish' })).isAfrican, false);
+  assert.equal(featureToPlace(pt3({ amenity: 'restaurant', name: 'Wakara', cuisine: 'japanese' })).isAfrican, false);
+  assert.equal(featureToPlace(pt3({ amenity: 'fast_food', name: 'La Frite Vagabonde', cuisine: 'burger' })).isAfrican, false);
+  assert.equal(featureToPlace(pt3({ amenity: 'fast_food', name: 'PouletoGo', cuisine: 'chicken' })).isAfrican, false);
+  assert.equal(featureToPlace(pt3({ amenity: 'fast_food', name: 'Tacos Dakar', cuisine: 'tacos' })).isAfrican, true);
+  assert.equal(featureToPlace(pt3({ amenity: 'fast_food', name: 'Burger Africain', cuisine: 'burger' })).isAfrican, true);
+  assert.equal(featureToPlace(pt3({ amenity: 'fast_food', name: 'Chez Mama', cuisine: 'poulet braisé' })).isAfrican, true);
+  assert.equal(featureToPlace(pt3({ amenity: 'fast_food', name: 'Chez la Famille', cuisine: 'pizza;french_tacos;tunisian' })).isAfrican, true);
+});
