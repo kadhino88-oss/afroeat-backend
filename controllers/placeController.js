@@ -37,9 +37,12 @@ const handler = (kind) => async (req, res) => {
     const { items, total } = await loadItems({ kind, ...coords, radiusKm, limit: req.query.limit, africanOnly });
     res.set('Cache-Control', 'public, max-age=300');
     if (kind === 'groceries') {
+      const isBusiness = (p) => p.category === 'african-business' || p.category === 'african-salon';
       return res.json({ success: true, radiusKm, count: items.length,
         total,
-        hasMore: total > items.length, groceries: items });
+        hasMore: total > items.length,
+        groceries: items.filter((p) => !isBusiness(p)),
+        businesses: items.filter(isBusiness) });
     }
     const restaurants = items.filter((p) => p.category === 'restaurant');
     const fastFoods = items.filter((p) => p.category === 'african-fast-food');

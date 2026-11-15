@@ -22,6 +22,7 @@ const AFRICAN_RE = new RegExp(
 
 const GROCERY_SHOPS = new Set(['supermarket', 'convenience', 'greengrocer', 'general', 'grocery', 'deli']);
 // Autres commerces africains, quelle que soit leur taille : mode, beauté, coiffure, boucherie, boulangerie...
+const SALON_SHOPS = new Set(['beauty', 'cosmetics', 'hairdresser', 'hairdresser_supply']);
 const OTHER_SHOPS = new Set([
   'clothes', 'fabric', 'tailor', 'boutique', 'shoes', 'jewelry', 'beauty', 'cosmetics', 'hairdresser', 'hairdresser_supply',
   'butcher', 'bakery', 'seafood', 'variety_store', 'wholesale', 'department_store', 'mobile_phone', 'money_transfer',
@@ -68,6 +69,7 @@ const featureToPlace = (feature, region = '') => {
     osmKey: idRaw,
     kind,
     name,
+    subtype: tags.shop || '',
     cuisine: tags.cuisine || '',
     address: [street, tags['addr:postcode'], city].filter(Boolean).join(', '),
     city,
@@ -80,4 +82,4 @@ const featureToPlace = (feature, region = '') => {
   };
 };
 
-module.exports = { featureToPlace, centroid, AFRICAN_RE, OTHER_SHOPS, GROCERY_SHOPS };
+module.exports = { featureToPlace, centroid, AFRICAN_RE, OTHER_SHOPS, GROCERY_SHOPS, SALON_SHOPS };

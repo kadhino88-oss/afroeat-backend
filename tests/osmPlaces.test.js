@@ -108,3 +108,8 @@ test('commerces africains de toute taille : boutique de mode, coiffure, plats et
   assert.equal(featureToPlace(pt2({ amenity: 'restaurant', name: 'Le Namibia Grill' })).isAfrican, true);
   assert.equal(featureToPlace(pt2({ shop: 'clothes', name: 'Zara' })).isAfrican, false);
 });
+
+test('sous-type du commerce conservé pour distinguer salons et autres commerces', () => {
+  const f = { id: 'node/10', properties: { shop: 'hairdresser', name: 'Afro Hair' }, geometry: { type: 'Point', coordinates: [6.1, 46.2] } };
+  assert.equal(featureToPlace(f).subtype, 'hairdresser');
+});
