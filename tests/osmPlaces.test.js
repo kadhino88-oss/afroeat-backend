@@ -97,3 +97,14 @@ test('AFROEAT ne référence que des commerces africains par défaut', () => {
   assert.match(script, /AFRICAN_ONLY \|\| 'true'/);
   assert.match(wf, /default: true/);
 });
+
+test('commerces africains de toute taille : boutique de mode, coiffure, plats et pays variés', () => {
+  const pt2 = (tags) => ({ id: 'node/9', properties: tags, geometry: { type: 'Point', coordinates: [6.1, 46.2] } });
+  const shop = featureToPlace(pt2({ shop: 'hairdresser', name: 'Salon Afro Beauté' }));
+  assert.equal(shop.kind, 'shop');
+  assert.equal(shop.isAfrican, true);
+  assert.equal(featureToPlace(pt2({ shop: 'clothes', name: 'Wax & Pagnes Kinshasa' })).isAfrican, true);
+  assert.equal(featureToPlace(pt2({ amenity: 'fast_food', name: 'Chez Mama', cuisine: 'nyama choma' })).isAfrican, true);
+  assert.equal(featureToPlace(pt2({ amenity: 'restaurant', name: 'Le Namibia Grill' })).isAfrican, true);
+  assert.equal(featureToPlace(pt2({ shop: 'clothes', name: 'Zara' })).isAfrican, false);
+});
