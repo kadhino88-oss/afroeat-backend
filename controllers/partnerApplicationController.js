@@ -14,7 +14,12 @@ const {
 const { validateApplication, STATUSES } = require('../utils/partnerApplication');
 
 const mailer = require('../utils/mailer');
-const { adminNewApplicationEmail, applicantConfirmationEmail, inviteEmail } = require('../utils/partnerMails');
+const {
+  adminNewApplicationEmail,
+  applicantConfirmationEmail,
+  inviteEmail,
+  accountUpgradedEmail,
+} = require('../utils/partnerMails');
 
 /**
  * Prévient l'équipe (PARTNER_NOTIFY_EMAIL) et accuse réception au candidat.
@@ -137,8 +142,77 @@ const createInvite = async (req, res) => {
     if (application.inviteUsedAt) {
       return res.status(409).json({ success: false, message: 'Le compte de ce partenaire a déjà été créé.' });
     }
-    if (await User.findOne({ email: application.email }).select('_id')) {
-      return res.status(409).json({ success: false, message: 'Un compte existe déjà avec cette adresse e-mail.' });
+    const existingUser = await User.findOne({ email: application.email });
+    if (existingUser) {
+      // Le candidat a déjà un compte client : pas d'invitation, son compte devient partenaire
+      // (il garde son mot de passe). Tout autre compte (admin, partenaire) reste intouché.
+      if (existingUser.role !== 'client' || existingUser.accountStatus === 'suspended') {
+        return res.status(409).json({
+          success: false,
+          code: 'ACCOUNT_ALREADY_PARTNER',
+          message: 'Cette adresse e-mail est déjà utilisée par un compte partenaire, administrateur ou suspendu.',
+        });
+      }
+
+      const claimedApplication = await PartnerApplication.findOneAndUpdate(
+        { _id: application._id, inviteUsedAt: null },
+        { inviteUsedAt: new Date(), status: 'approved', accountUser: existingUser._id },
+        { new: true }
+      );
+      if (!claimedApplication) {
+        return res.status(409).json({ success: false, message: 'Le compte de ce partenaire a déjà été créé.' });
+      }
+
+      const isCourier = application.businessType === 'courier';
+      const previousRole = existingUser.role;
+      try {
+        existingUser.role = isCourier ? 'livreur' : 'restaurant';
+        existingUser.accountStatus = 'active';
+        existingUser.isIdentityVerified = false;
+        existingUser.isWorkAuthorized = false;
+        existingUser.isAvailable = false;
+        if (!existingUser.phone && application.phone) existingUser.phone = application.phone;
+        await existingUser.save();
+      } catch (upgradeError) {
+        await PartnerApplication.updateOne(
+          { _id: application._id },
+          { inviteUsedAt: null, accountUser: null }
+        ).catch(() => {});
+        throw upgradeError;
+      }
+
+      let restaurantCreated = false;
+      if (!isCourier) {
+        try {
+          const point = await geocodeAddress(application.address, application.city, application.country);
+          await Restaurant.create(buildRestaurantFromApplication(application, existingUser._id, point));
+          restaurantCreated = true;
+        } catch (restaurantError) {
+          console.error('Partner restaurant creation error:', restaurantError.message);
+        }
+      }
+
+      const role = isCourier ? 'livreur' : 'restaurant';
+      let emailSent = false;
+      try {
+        const result = await mailer.sendMail({
+          to: application.email,
+          ...accountUpgradedEmail(application, `${base}/auth/login?role=${role}`),
+        });
+        emailSent = Boolean(result?.sent);
+        if (!emailSent) console.error(`Partner upgrade mail not sent: ${result?.reason || 'inconnu'}`);
+      } catch (error) {
+        console.error('Partner upgrade mail error:', error.message);
+      }
+
+      return res.json({
+        success: true,
+        accountUpgraded: true,
+        previousRole,
+        role,
+        restaurantCreated,
+        emailSent,
+      });
     }
 
     const { token, tokenHash, expiresAt } = generateInviteToken();

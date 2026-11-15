@@ -74,7 +74,7 @@ test('le partenaire ne saisit que nom, téléphone et mot de passe (mot de passe
 test("l'admin génère un lien https sans stocker le jeton en clair, et la candidature passe à « approved »", async () => {
   const application = baseApp();
   PartnerApplication.findById = async () => application;
-  User.findOne = () => ({ select: async () => null });
+  User.findOne = async () => null;
   const res = mockRes();
   await createInvite({ params: { id: String(application._id) } }, res);
   assert.equal(res.statusCode, 200);
@@ -87,13 +87,20 @@ test("l'admin génère un lien https sans stocker le jeton en clair, et la candi
 
 test("pas d'invitation si un compte existe déjà ou si la demande est refusée", async () => {
   PartnerApplication.findById = async () => baseApp();
-  User.findOne = () => ({ select: async () => ({ _id: 'x' }) });
+  for (const role of ['admin', 'restaurant', 'livreur']) {
+    User.findOne = async () => ({ _id: 'x', role, accountStatus: 'active' });
+    const blocked = mockRes();
+    await createInvite({ params: { id: 'a' } }, blocked);
+    assert.equal(blocked.statusCode, 409, role);
+    assert.equal(blocked.body.code, 'ACCOUNT_ALREADY_PARTNER');
+  }
+  User.findOne = async () => ({ _id: 'x', role: 'client', accountStatus: 'suspended' });
   let res = mockRes();
   await createInvite({ params: { id: 'a' } }, res);
   assert.equal(res.statusCode, 409);
 
   PartnerApplication.findById = async () => baseApp({ status: 'rejected' });
-  User.findOne = () => ({ select: async () => null });
+  User.findOne = async () => null;
   res = mockRes();
   await createInvite({ params: { id: 'a' } }, res);
   assert.equal(res.statusCode, 409);
@@ -237,4 +244,30 @@ test("l'inscription par invitation crée le restaurant ; un échec de création 
   assert.equal(res.statusCode, 201);
   assert.equal(res.body.restaurantCreated, false);
   globalThis.fetch = originalFetch;
+});
+
+test('un candidat livreur qui a déjà un compte client : son compte devient livreur, sans invitation', async () => {
+  const application = baseApp({ businessType: 'courier', businessName: '' });
+  PartnerApplication.findById = async () => application;
+  PartnerApplication.findOneAndUpdate = async () => ({ ...application, inviteUsedAt: new Date() });
+  const existing = {
+    _id: new mongoose.Types.ObjectId(),
+    role: 'client',
+    accountStatus: 'active',
+    phone: '',
+    saved: 0,
+    async save() { this.saved += 1; return this; },
+  };
+  User.findOne = async () => existing;
+  const res = mockRes();
+  await createInvite({ params: { id: String(application._id) } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.accountUpgraded, true);
+  assert.equal(res.body.role, 'livreur');
+  assert.equal(res.body.inviteUrl, undefined);
+  assert.equal(existing.role, 'livreur');
+  assert.equal(existing.isIdentityVerified, false);
+  assert.equal(existing.isAvailable, false);
+  assert.equal(existing.phone, '+41791234567');
+  assert.equal(existing.saved, 1);
 });

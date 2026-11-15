@@ -65,4 +65,25 @@ const inviteEmail = (application, inviteUrl, expiresAt) => {
   };
 };
 
-module.exports = { typeLabel, adminNewApplicationEmail, applicantConfirmationEmail, inviteEmail };
+/** Pour le candidat qui avait déjà un compte : son compte existant devient un compte partenaire. */
+const accountUpgradedEmail = (application, loginUrl) => ({
+  subject: 'AfroEat – Ta candidature est acceptée',
+  text: [
+    `Bonjour ${application.contactName || ''},`.replace(' ,', ','),
+    '',
+    `Ta candidature ${typeLabel(application.businessType).toLowerCase()} est acceptée.`,
+    'Tu avais déjà un compte AfroEat avec cette adresse : il devient ton compte partenaire.',
+    'Connecte-toi avec ton mot de passe habituel :',
+    loginUrl,
+    '',
+    'Si tu as oublié ton mot de passe, utilise « Mot de passe oublié » sur la page de connexion.',
+  ].join('\n'),
+});
+
+module.exports = {
+  typeLabel,
+  adminNewApplicationEmail,
+  applicantConfirmationEmail,
+  inviteEmail,
+  accountUpgradedEmail,
+};
