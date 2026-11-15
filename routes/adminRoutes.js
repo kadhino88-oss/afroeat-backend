@@ -23,6 +23,11 @@ const {
   createInvite,
 } = require('../controllers/partnerApplicationController');
 
+const {
+  listDocuments: listVerificationDocuments,
+  getDocumentFile: getVerificationDocumentFile,
+  reviewDocument: reviewVerificationDocument,
+} = require('../controllers/verificationController');
 const adminAuditRoutes = require('./adminAuditRoutes');
 const adminOpsRoutes = require('./adminOpsRoutes');
 
@@ -114,6 +119,11 @@ router.get('/orders/:id', getAdminOrderById);
  * Elles héritent déjà de protect + requireAdmin grâce
  * au router.use global ci-dessus.
  */
+// Pièces justificatives des partenaires (fichiers chiffrés, consultations tracées).
+router.get('/verification', listVerificationDocuments);
+router.get('/verification/:id/file', getVerificationDocumentFile);
+router.patch('/verification/:id', reviewVerificationDocument);
+
 router.use('/audit-logs', adminAuditRoutes);
 router.use('/ops', adminOpsRoutes);
 
