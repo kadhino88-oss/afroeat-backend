@@ -114,6 +114,18 @@ const userSchema = new mongoose.Schema(
 
     passwordChangedAt: { type: Date, default: null },
 
+    // Carnet d'adresses de livraison du client (5 maximum).
+    savedAddresses: {
+      type: [
+        {
+          label: { type: String, trim: true, maxlength: 40, default: '' },
+          address: { type: String, trim: true, minlength: 5, maxlength: 300, required: true },
+          isDefault: { type: Boolean, default: false },
+        },
+      ],
+      default: [],
+    },
+
     // Double authentification (administrateurs) : secret chiffré, jamais renvoyé par défaut.
     twoFactor: {
       enabled: { type: Boolean, default: false },
