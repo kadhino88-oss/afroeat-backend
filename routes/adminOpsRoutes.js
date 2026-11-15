@@ -50,4 +50,18 @@ router.use(requireAdmin);
  */
 router.get('/', getAdminOpsOverview);
 
+// Relance manuelle de l'annulation des commandes sans suite (et des remboursements associés).
+router.post('/expire-stale-orders', async (req, res) => {
+  try {
+    const Order = require('../models/Order');
+    const { expireStaleOrders } = require('../utils/staleOrders');
+    const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+    const result = await expireStaleOrders({ Order, stripe });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('expire-stale-orders:', error.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;
