@@ -17,6 +17,9 @@ const {
 
 const { sendPushToUser } = require('../utils/pushNotifications');
 const { refundCancelledOrder } = require('../utils/orderRefund');
+const PromoCode = require('../models/PromoCode');
+const { resolvePromo, claimPromoUse } = require('./promoController');
+const { releasePromoForOrder } = require('../utils/promoCodes');
 const { maybeExpireStaleOrders } = require('../utils/staleOrders');
 
 const stripeClient = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
@@ -25,6 +28,7 @@ const stripeClient = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.e
 const expireStaleOrdersOpportunistically = () =>
   maybeExpireStaleOrders({
     Order,
+    PromoCode,
     stripe: stripeClient,
     notify: async (order) =>
       sendPushToUser(order.user, {
@@ -837,24 +841,6 @@ const createOrder = async (req, res) => {
       });
     }
 
-    // Le client affiche un devis avant de valider : si le serveur recalcule autre chose
-    // (prix modifié, frais de livraison changés), on refuse et on lui renvoie le nouveau devis.
-    if (req.body?.quotedTotal !== undefined && req.body?.quotedTotal !== null) {
-      const quotedTotal = Number(req.body.quotedTotal);
-      const quotedCurrency = String(req.body.quotedCurrency || pricing.currency).trim().toUpperCase();
-      if (
-        !Number.isFinite(quotedTotal) ||
-        Math.abs(quotedTotal - pricing.totalPrice) > 0.005 ||
-        quotedCurrency !== pricing.currency
-      ) {
-        return res.status(409).json({
-          success: false,
-          code: 'QUOTE_CHANGED',
-          message: 'Le montant de la commande a changé. Vérifie le nouveau total.',
-        });
-      }
-    }
-
     let marketplaceRates;
     try {
       marketplaceRates = getMarketplaceRates(pricing.currency);
@@ -881,6 +867,39 @@ const createOrder = async (req, res) => {
       rates: marketplaceRates,
     });
 
+    // Code promo : remise financée par la plateforme, plafonnée sur sa marge.
+    const promoResult = await resolvePromo({
+      rawCode: req.body?.promoCode,
+      userId: orderUser,
+      subtotal: pricing.subtotal,
+      deliveryFee: pricing.deliveryFee,
+      currency: pricing.currency,
+      split: marketplaceSplit,
+    });
+    if (!promoResult.ok) {
+      return res.status(409).json({ success: false, code: promoResult.code, message: promoResult.message });
+    }
+    const discountAmount = promoResult.discount || 0;
+    const finalTotal = roundMoney(pricing.totalPrice - discountAmount);
+
+    // Le client affiche un devis avant de valider : si le serveur recalcule autre chose
+    // (prix modifié, frais de livraison changés), on refuse et on lui renvoie le nouveau devis.
+    if (req.body?.quotedTotal !== undefined && req.body?.quotedTotal !== null) {
+      const quotedTotal = Number(req.body.quotedTotal);
+      const quotedCurrency = String(req.body.quotedCurrency || pricing.currency).trim().toUpperCase();
+      if (
+        !Number.isFinite(quotedTotal) ||
+        Math.abs(quotedTotal - finalTotal) > 0.005 ||
+        quotedCurrency !== pricing.currency
+      ) {
+        return res.status(409).json({
+          success: false,
+          code: 'QUOTE_CHANGED',
+          message: 'Le montant de la commande a changé. Vérifie le nouveau total.',
+        });
+      }
+    }
+
     const safeCustomerLocation = normalizeCoordinates(customerLocation);
     const safeRestaurantLocation = normalizeCoordinates({
       lat: restaurantExists?.location?.latitude ?? restaurantExists?.latitude,
@@ -906,6 +925,8 @@ const createOrder = async (req, res) => {
       restaurantLocation: safeRestaurantLocation,
       deliveryFee: pricing.deliveryFee,
       donationAmount: 0,
+      promoCode: promoResult.promo?.code || '',
+      discountAmount,
       driverEarning: marketplaceSplit.driverEarning,
       marketplaceSplitCalculated: true,
       commissionRateBps: marketplaceSplit.commissionRateBps,
@@ -925,10 +946,18 @@ const createOrder = async (req, res) => {
       ],
     });
 
+    // Réserve l'utilisation du code (atomique), libérée si la commande n'est pas enregistrée.
+    if (promoResult.promo && !(await claimPromoUse(promoResult.promo))) {
+      return res.status(409).json({ success: false, code: 'PROMO_EXHAUSTED', message: 'Ce code promo a atteint son nombre maximal d’utilisations.' });
+    }
+
     let savedOrder;
     try {
       savedOrder = await newOrder.save();
     } catch (error) {
+      if (promoResult.promo) {
+        await PromoCode.updateOne({ _id: promoResult.promo._id, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } }).catch(() => {});
+      }
       // Concurrent retries can pass the first lookup together; the compound
       // unique index makes only one insert win and the loser returns that order.
       if (idempotencyKey && error?.code === 11000) {
@@ -1054,6 +1083,7 @@ const updateOrderStatus = async (req, res) => {
     }
 
     if (nextStatus === 'Annulée') {
+      await releasePromoForOrder(order, PromoCode).then((released) => (released ? order.save() : null)).catch(() => {});
       // Commande payée par carte puis annulée : remboursement immédiat.
       const refund = await refundCancelledOrder(order, stripeClient);
       if (refund.refunded) {
@@ -1393,6 +1423,30 @@ const getOrderQuote = async (req, res) => {
       });
     }
 
+    // Code promo facultatif : le devis affiche la remise réelle, ou l'erreur précise du code.
+    let promoQuote = { discount: 0, promo: null };
+    if (req.body?.promoCode) {
+      let rates = null;
+      try {
+        rates = getMarketplaceRates(pricing.currency);
+      } catch {
+        rates = null;
+      }
+      const split = calculateMarketplaceSplit({ itemsSubtotal: pricing.subtotal, deliveryFee: pricing.deliveryFee, rates });
+      const resolved = await resolvePromo({
+        rawCode: req.body.promoCode,
+        userId: req.user?._id,
+        subtotal: pricing.subtotal,
+        deliveryFee: pricing.deliveryFee,
+        currency: pricing.currency,
+        split,
+      });
+      if (!resolved.ok) {
+        return res.status(409).json({ success: false, code: resolved.code, message: resolved.message });
+      }
+      promoQuote = resolved;
+    }
+
     return res.status(200).json({
       success: true,
       quote: {
@@ -1406,7 +1460,9 @@ const getOrderQuote = async (req, res) => {
         })),
         itemsSubtotal: pricing.subtotal,
         deliveryFee: pricing.deliveryFee,
-        totalPrice: pricing.totalPrice,
+        discountAmount: promoQuote.discount || 0,
+        promoCode: promoQuote.promo?.code || '',
+        totalPrice: roundMoney(pricing.totalPrice - (promoQuote.discount || 0)),
         currency: pricing.currency,
       },
     });

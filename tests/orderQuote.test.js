@@ -27,7 +27,7 @@ test('le contrôleur exporte getOrderQuote et ne dépend pas du verrou de produc
 test('createOrder refuse un devis périmé avec QUOTE_CHANGED (409)', () => {
   const src = read('controllers', 'orderController.js');
   assert.match(src, /code: 'QUOTE_CHANGED'/);
-  assert.match(src, /Math\.abs\(quotedTotal - pricing\.totalPrice\) > 0\.005/);
+  assert.match(src, /Math\.abs\(quotedTotal - finalTotal\) > 0\.005/);
 });
 
 test('le verrou de production de createOrder reste en place', () => {

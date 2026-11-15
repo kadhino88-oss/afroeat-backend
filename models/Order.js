@@ -355,6 +355,9 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
+    promoCode: { type: String, default: '', trim: true, maxlength: 24 },
+    discountAmount: { type: Number, default: 0, min: 0, validate: { validator: Number.isFinite, message: 'Remise invalide' } },
+    promoReleased: { type: Boolean, default: false },
     refundRequestedAt: { type: Date, default: null },
     refundError: { type: String, default: '', trim: true, maxlength: 300 },
     refundedAt: {
@@ -684,7 +687,10 @@ orderSchema.pre('save', function () {
 
     const itemsSubtotal = roundMoney(calculatedItemsTotal);
     this.totalPrice = roundMoney(
-      itemsSubtotal + normalizedDeliveryFee + normalizedDonationAmount
+      Math.max(
+        0,
+        itemsSubtotal + normalizedDeliveryFee + normalizedDonationAmount - roundMoney(this.discountAmount || 0)
+      )
     );
   } else {
     this.totalPrice = roundMoney(this.totalPrice);

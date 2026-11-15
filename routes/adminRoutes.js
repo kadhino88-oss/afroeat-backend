@@ -76,6 +76,12 @@ router.use(requireAdmin);
 // En production, l'API d'administration ne répond qu'à l'adresse dédiée à l'administration.
 router.use(requireAdminOrigin);
 
+// Codes promo (remises financées par la plateforme).
+const promos = require('../controllers/promoController');
+router.get('/promo-codes', promos.listPromos);
+router.post('/promo-codes', promos.createPromo);
+router.patch('/promo-codes/:id', promos.setPromoActive);
+
 // Double authentification de l'administrateur connecté.
 const twoFactor = require('../controllers/twoFactorController');
 router.get('/2fa/status', twoFactor.status);
