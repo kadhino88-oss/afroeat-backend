@@ -85,3 +85,13 @@ Les commandes et paiements par carte réels s'ouvrent avec la variable `AFROEAT_
 à condition que la clé Stripe soit réelle, que `STRIPE_WEBHOOK_SECRET` et `MARKETPLACE_RATES_JSON` soient renseignés.
 Si un élément manque, tout reste verrouillé. Pour refermer : supprimer la variable puis redéployer.
 Le paiement à la livraison reste désactivé en production réelle.
+
+## Vérification d'identité des partenaires
+
+Les livreurs envoient une pièce d'identité et leur autorisation de travail ; les commerçants une pièce
+d'identité du responsable et un extrait du registre du commerce. L'administrateur les accepte ou les refuse.
+
+- `DOCUMENT_ENCRYPTION_KEY` (64 caractères hexadécimaux) est obligatoire : sans elle, aucun document n'est accepté.
+  Ne jamais la changer une fois des documents envoyés (ils deviendraient illisibles) et ne jamais la partager.
+- Les fichiers sont chiffrés (AES-256-GCM), lus uniquement depuis l'administration, et chaque consultation est tracée.
+- Effacement automatique : 90 jours sans décision, 30 jours après la décision. Seule la décision est conservée.
