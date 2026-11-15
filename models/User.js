@@ -113,6 +113,16 @@ const userSchema = new mongoose.Schema(
     stripeConnectRequirementsDueCount: { type: Number, default: 0, min: 0 },
 
     passwordChangedAt: { type: Date, default: null },
+
+    // Double authentification (administrateurs) : secret chiffré, jamais renvoyé par défaut.
+    twoFactor: {
+      enabled: { type: Boolean, default: false },
+      secret: { type: { iv: Buffer, tag: Buffer, data: Buffer }, default: null, select: false },
+      pendingSecret: { type: { iv: Buffer, tag: Buffer, data: Buffer }, default: null, select: false },
+      lastStep: { type: Number, default: 0, select: false },
+      backupCodeHashes: { type: [String], default: [], select: false },
+      enabledAt: { type: Date, default: null },
+    },
     deletedAt: { type: Date, default: null },
 
     pushToken: {
