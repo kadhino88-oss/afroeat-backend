@@ -125,3 +125,17 @@ test('faux africains écartés, vrais fast-foods africains conservés', () => {
   assert.equal(featureToPlace(pt3({ amenity: 'fast_food', name: 'Chez Mama', cuisine: 'poulet braisé' })).isAfrican, true);
   assert.equal(featureToPlace(pt3({ amenity: 'fast_food', name: 'Chez la Famille', cuisine: 'pizza;french_tacos;tunisian' })).isAfrican, true);
 });
+
+test('fast-food halal (kebab, tacos, burger…) reconnu comme commerce nord-africain probable', () => {
+  const pt4 = (tags) => ({ id: 'node/12', properties: tags, geometry: { type: 'Point', coordinates: [6.1, 46.2] } });
+  assert.equal(featureToPlace(pt4({ amenity: 'fast_food', name: 'Kebab du Port', cuisine: 'kebab', 'diet:halal': 'yes' })).isAfrican, true);
+  assert.equal(featureToPlace(pt4({ amenity: 'fast_food', name: 'Chez Samir', cuisine: 'french_tacos;burger', 'diet:halal': 'only' })).isAfrican, true);
+  assert.equal(featureToPlace(pt4({ amenity: 'fast_food', name: 'Halal Burger House', cuisine: 'burger' })).isAfrican, true);
+  // sans signal halal : pas d'étiquette abusive
+  assert.equal(featureToPlace(pt4({ amenity: 'fast_food', name: 'Burger Palace', cuisine: 'burger' })).isAfrican, false);
+  assert.equal(featureToPlace(pt4({ amenity: 'fast_food', name: 'McDonald\'s', cuisine: 'burger' })).isAfrican, false);
+  // cuisine turque explicitement indiquée : exclue
+  assert.equal(featureToPlace(pt4({ amenity: 'fast_food', name: 'Istanbul Kebab', cuisine: 'turkish;kebab', 'diet:halal': 'yes' })).isAfrican, false);
+  // halal mais pas de la restauration rapide (boucherie, épicerie…) : inchangé
+  assert.equal(featureToPlace(pt4({ shop: 'butcher', name: 'Boucherie Halal Centrale' })).isAfrican, false);
+});
