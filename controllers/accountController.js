@@ -7,6 +7,7 @@ const Restaurant = require('../models/Restaurant');
 const SupportTicket = require('../models/SupportTicket');
 const VerificationDocument = require('../models/VerificationDocument');
 const VerificationFile = require('../models/VerificationFile');
+const { parseAddressInput, addAddress, removeAddress } = require('../utils/savedAddresses');
 const {
   ACTIVE_ORDER_STATUSES,
   canDeleteRole,
@@ -113,4 +114,48 @@ const accountDeletionPage = (req, res) => {
   return res.send(accountDeletionPageHtml(process.env.SUPPORT_EMAIL || process.env.PARTNER_NOTIFY_EMAIL));
 };
 
-module.exports = { deleteMyAccount, exportMyData, accountDeletionPage };
+const toApi = (list) => (list || []).map((a) => ({ id: String(a._id), label: a.label || '', address: a.address, isDefault: Boolean(a.isDefault) }));
+
+// GET /api/users/me/addresses
+const listAddresses = async (req, res) => {
+  const user = await User.findById(req.user.id).select('savedAddresses');
+  return res.json({ success: true, addresses: toApi(user?.savedAddresses) });
+};
+
+// POST /api/users/me/addresses — { label?, address, isDefault? }
+const createAddress = async (req, res) => {
+  try {
+    const parsed = parseAddressInput(req.body);
+    if (parsed.error) return res.status(400).json({ success: false, message: parsed.error });
+    const user = await User.findById(req.user.id).select('savedAddresses address');
+    if (!user) return res.status(404).json({ success: false, message: 'Utilisateur introuvable' });
+    const result = addAddress(user.savedAddresses, parsed.value);
+    if (result.error) return res.status(409).json({ success: false, code: 'ADDRESS_LIMIT', message: result.error });
+    user.savedAddresses = result.list;
+    const def = result.list.find((a) => a.isDefault);
+    if (def) user.address = def.address; // l'adresse par défaut alimente aussi le profil
+    await user.save({ validateBeforeSave: false });
+    return res.status(201).json({ success: true, addresses: toApi(user.savedAddresses) });
+  } catch (error) {
+    console.error('Create address error:', error.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
+// DELETE /api/users/me/addresses/:id
+const deleteAddress = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('savedAddresses address');
+    if (!user) return res.status(404).json({ success: false, message: 'Utilisateur introuvable' });
+    user.savedAddresses = removeAddress(user.savedAddresses, req.params.id);
+    const def = user.savedAddresses.find((a) => a.isDefault);
+    if (def) user.address = def.address;
+    await user.save({ validateBeforeSave: false });
+    return res.json({ success: true, addresses: toApi(user.savedAddresses) });
+  } catch (error) {
+    console.error('Delete address error:', error.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
+module.exports = { deleteMyAccount, exportMyData, accountDeletionPage, listAddresses, createAddress, deleteAddress };
