@@ -2,6 +2,7 @@
 
 // Commandes restées sans suite : annulées automatiquement (et remboursées si déjà payées).
 const { refundCancelledOrder } = require('./orderRefund');
+const { releasePromoForOrder } = require('./promoCodes');
 
 const DEFAULTS = {
   acceptTimeoutMin: Number(process.env.ORDER_ACCEPT_TIMEOUT_MIN) || 15, // payée, restaurant sans réponse
@@ -11,14 +12,15 @@ const DEFAULTS = {
 const AUTO_NOTE_UNANSWERED = 'Annulée automatiquement : le restaurant n’a pas répondu à temps.';
 const AUTO_NOTE_UNPAID = 'Annulée automatiquement : paiement non finalisé.';
 
-const cancel = async (order, note) => {
+const cancel = async (order, note, PromoCode) => {
   order.status = 'Annulée';
+  if (PromoCode) await releasePromoForOrder(order, PromoCode).catch(() => {});
   if (!Array.isArray(order.statusHistory)) order.statusHistory = [];
   order.statusHistory.push({ status: 'Annulée', updatedBy: null, updatedByRole: 'system', note });
   await order.save();
 };
 
-const expireStaleOrders = async ({ Order, stripe, now = Date.now(), notify = async () => {}, ...limits } = {}) => {
+const expireStaleOrders = async ({ Order, PromoCode = null, stripe, now = Date.now(), notify = async () => {}, ...limits } = {}) => {
   const { acceptTimeoutMin, unpaidTimeoutMin } = { ...DEFAULTS, ...limits };
   const result = { unanswered: 0, unpaid: 0, refunded: 0 };
 
@@ -28,7 +30,7 @@ const expireStaleOrders = async ({ Order, stripe, now = Date.now(), notify = asy
     createdAt: { $lt: new Date(now - acceptTimeoutMin * 60000) },
   }).limit(50);
   for (const order of unanswered) {
-    await cancel(order, AUTO_NOTE_UNANSWERED);
+    await cancel(order, AUTO_NOTE_UNANSWERED, PromoCode);
     result.unanswered += 1;
     const r = await refundCancelledOrder(order, stripe);
     if (r.refunded) result.refunded += 1;
@@ -42,7 +44,7 @@ const expireStaleOrders = async ({ Order, stripe, now = Date.now(), notify = asy
     createdAt: { $lt: new Date(now - unpaidTimeoutMin * 60000) },
   }).limit(50);
   for (const order of unpaid) {
-    await cancel(order, AUTO_NOTE_UNPAID);
+    await cancel(order, AUTO_NOTE_UNPAID, PromoCode);
     result.unpaid += 1;
   }
 
