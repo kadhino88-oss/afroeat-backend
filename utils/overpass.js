@@ -12,7 +12,7 @@ const MAX_RESULTS = 500;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const cache = new Map();
 
-const { AFRICAN_RE } = require('./osmPlaces');
+const { AFRICAN_RE, GROCERY_SHOPS } = require('./osmPlaces');
 
 const toRad = (d) => (d * Math.PI) / 180;
 const distanceKm = (lat1, lon1, lat2, lon2) => {
@@ -32,7 +32,10 @@ const buildQuery = (kind, lat, lng, radiusKm) => {
   const around = `(around:${Math.round(radiusKm * 1000)},${lat},${lng})`;
   const selectors =
     kind === 'groceries'
-      ? ['shop~"^(supermarket|convenience|greengrocer|general|grocery|deli)$"']
+      ? [
+          'shop~"^(supermarket|convenience|greengrocer|general|grocery|deli|clothes|fabric|tailor|boutique|shoes|jewelry|beauty|cosmetics|hairdresser|hairdresser_supply|butcher|bakery|seafood|variety_store|wholesale|spices|market)$"',
+          'amenity=marketplace',
+        ]
       : ['amenity~"^(restaurant|fast_food)$"'];
   const body = selectors
     .map((s) => `nwr[${s}]${around};`)
@@ -54,7 +57,7 @@ const normalizeElement = (el, kind, lat, lng) => {
     source: 'openstreetmap',
     category:
       kind === 'groceries'
-        ? 'african-grocery'
+        ? (GROCERY_SHOPS.has(tags.shop) ? 'african-grocery' : 'african-shop')
         : tags.amenity === 'fast_food' && isAfrican ? 'african-fast-food' : 'restaurant',
     amenity: tags.amenity || tags.shop || null,
     name: tags.name || '',

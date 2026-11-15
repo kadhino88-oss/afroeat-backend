@@ -10,6 +10,10 @@ const AFRICAN_RE = new RegExp(
     'ethiop', '[ée]rythr', 'somali', 'kenya', 'ugand', 'tanzan', 'rwanda', 'burundi', 'angola',
     'mozambi', 'zambi', 'zimbab', 'madagas', 'mauritan', 'mauritius', 'sierra leone', 'liberia', 'gambia', 'gambie', 'cap.?vert', 'cabo verde',
     'maroc', 'moroc', 'alg[ée]r', 'tunis', 'egypt', '[ée]gypt', 'liby', 'sudan', 'comor',
+    'afrique du sud', 'south africa', 'namibi', 'botswan', 'malawi', 'lesotho', 'eswatini', 'swazi', 'djibouti',
+    '[ée]quatorial', 'sao tom', 's[aã]o tom', 'seychell', 'maghreb', 'sahel', 'kabyl', 'berb[eè]re', 'touareg',
+    'wolof', 'peul\\b', 'bambara', 'yoruba', 'igbo', 'hausa\\b', 'swahili', 'zulu', 'amhar', 'lingala', 'kinois', 'abidjan', 'dakar', 'douala', 'kinshasa', 'brazzaville', 'lagos', 'accra',
+    'poulet dg', 'garba', 'placali', 'saka.?saka', 'pondu', 'liboke', 'chikwangue', 'ugali', 'nyama choma', 'braai', 'bunny chow', 'egusi', 'amala', 'akara', 'waakye', 'kelewele', 'banku', 'peri.?peri', 'piri.?piri', 'shawarma africain',
     'yassa', 'maf[ée]', 'thi[eé]b', 'attieke', 'attiék', 'alloco', 'kedjenou', 'ndol[ée]', 'foufou', 'fufu', 'foutou',
     'injera', 'suya', 'jollof', 'couscous', 'tajine', 'tagine', 'bissap', 'gnamakoudji', 'kandia',
   ].join('|'),
@@ -17,6 +21,12 @@ const AFRICAN_RE = new RegExp(
 );
 
 const GROCERY_SHOPS = new Set(['supermarket', 'convenience', 'greengrocer', 'general', 'grocery', 'deli']);
+// Autres commerces africains, quelle que soit leur taille : mode, beauté, coiffure, boucherie, boulangerie...
+const OTHER_SHOPS = new Set([
+  'clothes', 'fabric', 'tailor', 'boutique', 'shoes', 'jewelry', 'beauty', 'cosmetics', 'hairdresser', 'hairdresser_supply',
+  'butcher', 'bakery', 'seafood', 'variety_store', 'wholesale', 'department_store', 'mobile_phone', 'money_transfer',
+  'florist', 'gift', 'art', 'books', 'music', 'electronics', 'furniture', 'kiosk', 'market', 'marketplace', 'spices', 'tea', 'coffee',
+]);
 
 const centroid = (geometry) => {
   if (!geometry) return null;
@@ -41,6 +51,7 @@ const featureToPlace = (feature, region = '') => {
   if (tags.amenity === 'restaurant') kind = 'restaurant';
   else if (tags.amenity === 'fast_food') kind = 'fast_food';
   else if (GROCERY_SHOPS.has(tags.shop)) kind = 'grocery';
+  else if (OTHER_SHOPS.has(tags.shop) || tags.amenity === 'marketplace') kind = 'shop';
   if (!kind) return null;
 
   const point = centroid(feature.geometry);
@@ -69,4 +80,4 @@ const featureToPlace = (feature, region = '') => {
   };
 };
 
-module.exports = { featureToPlace, centroid, AFRICAN_RE };
+module.exports = { featureToPlace, centroid, AFRICAN_RE, OTHER_SHOPS, GROCERY_SHOPS };

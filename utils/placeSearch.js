@@ -11,7 +11,9 @@ const toApi = (doc) => {
     id: `osm-${String(doc.osmKey).replace('/', '-')}`,
     source: 'openstreetmap',
     // Catégories attendues par l'appli : restaurant, african-fast-food, african-grocery.
-    category: isGrocery
+    category: doc.kind === 'shop'
+      ? 'african-shop'
+      : isGrocery
       ? 'african-grocery'
       : doc.kind === 'fast_food' && doc.isAfrican ? 'african-fast-food' : 'restaurant',
     name: doc.name,
@@ -37,7 +39,7 @@ const clampLimit = (value) => {
 
 // Renvoie { items, total } : total = nombre réel de lieux dans le rayon (même au-delà de la limite).
 const findStoredPlaces = async ({ kind, lat, lng, radiusKm, limit, africanOnly = false }) => {
-  const kinds = kind === 'groceries' ? ['grocery'] : ['restaurant', 'fast_food'];
+  const kinds = kind === 'groceries' ? ['grocery', 'shop'] : ['restaurant', 'fast_food'];
   const max = clampLimit(limit);
   const extra = africanOnly ? { isAfrican: true } : {};
   const [docs, total] = await Promise.all([

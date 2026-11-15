@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const placeSchema = new mongoose.Schema(
   {
     osmKey: { type: String, required: true, unique: true }, // ex. node/123456
-    kind: { type: String, enum: ['restaurant', 'fast_food', 'grocery'], required: true, index: true },
+    kind: { type: String, enum: ['restaurant', 'fast_food', 'grocery', 'shop'], required: true, index: true },
     name: { type: String, required: true, trim: true },
     cuisine: { type: String, default: '' },
     address: { type: String, default: '' },
