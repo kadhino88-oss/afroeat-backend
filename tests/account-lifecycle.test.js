@@ -35,3 +35,11 @@ test('page publique de suppression + routes enregistrées', () => {
   assert.ok(paths.includes('get /me/export'));
   assert.ok(paths.includes('get /account-deletion'));
 });
+
+test("l'export des données ne contient aucun secret", () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'controllers', 'accountController.js'), 'utf8');
+  const start = src.indexOf('const exportMyData');
+  const body = src.slice(start, src.indexOf('accountDeletionPage = ', start));
+  for (const secret of ['password', 'passwordResetTokenHash', 'twoFactor']) assert.match(body, new RegExp(secret));
+  assert.match(body, /\.\.\.profile/);
+});

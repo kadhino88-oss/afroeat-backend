@@ -80,7 +80,7 @@ const login = async (email, role, password = PASSWORD) => {
   return { token: response.json.token, id: userIdOf(response.json) };
 };
 
-const createOrder = async ({ items, total, key = uuid() }) => {
+const createOrder = async ({ items, total, key = uuid(), promoCode }) => {
   const response = await call('POST', '/orders', {
     token: state.client.token,
     headers: { 'Idempotency-Key': key },
@@ -92,6 +92,7 @@ const createOrder = async ({ items, total, key = uuid() }) => {
       deliveryAddress: 'Rue du Rhône 1, 1204 Genève',
       deliveryAddressDetails: { address: 'Rue du Rhône 1, 1204 Genève', fullAddress: 'Rue du Rhône 1, 1204 Genève' },
       notes: `e2e ${run}`,
+      ...(promoCode ? { promoCode } : {}),
     },
   });
   return response;
@@ -281,6 +282,141 @@ const main = async () => {
     expectStatus(response, 200);
     expect(/^https:\/\/checkout\.stripe\.com\//.test(String(response.json?.url || '')), `adresse inattendue : ${String(response.json?.url || '').slice(0, 40)}`);
     return 'adresse checkout.stripe.com reçue';
+  });
+
+  // ─── Codes promo (remise financée par la plateforme) ───
+  const promoCode = `E2E${run}`.toUpperCase().slice(0, 20);
+  const subtotalOf = () => Number(state.yassa.price) + 2 * Number(state.alloco.price);
+  state.admin = state.admin || (await login('admin-test@afroeat.test', 'admin'));
+
+  await step('admin : crée un code promo de 10 %', async () => {
+    const response = await call('POST', '/admin/promo-codes', {
+      token: state.admin.token,
+      body: { code: promoCode, type: 'percent', value: 10, maxUses: 5, description: 'e2e' },
+    });
+    expectStatus(response, 201);
+    state.promoId = response.json?.promoCode?.id;
+    expect(state.promoId, 'identifiant du code introuvable');
+    const duplicate = await call('POST', '/admin/promo-codes', { token: state.admin.token, body: { code: promoCode, type: 'percent', value: 10 } });
+    expectStatus(duplicate, 409, 'doublon : ');
+  });
+
+  await step('devis avec code promo : remise plafonnée, restaurant et livreur non touchés', async () => {
+    const response = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items, promoCode } });
+    expectStatus(response, 200);
+    const quote = response.json?.quote;
+    expect(quote?.promoCode === promoCode, `code ${quote?.promoCode}`);
+    expect(quote.discountAmount > 0, 'aucune remise');
+    expect(quote.discountAmount <= subtotalOf() * 0.1 + 0.001, 'remise supérieure à 10 % du sous-total');
+    expect(Math.abs(quote.totalPrice + quote.discountAmount - expectedTotal) < 0.005, 'total incohérent');
+    state.promoQuote = quote;
+    return `−${quote.discountAmount} CHF`;
+  });
+
+  await step('code inconnu refusé (PROMO_INVALID)', async () => {
+    const response = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items, promoCode: 'NEXISTEPAS' } });
+    expectStatus(response, 409);
+    expect(response.json?.code === 'PROMO_INVALID', `code ${response.json?.code}`);
+  });
+
+  await step('commande avec code promo : total remisé confirmé par le serveur', async () => {
+    const response = await createOrder({ items, total: state.promoQuote.totalPrice, promoCode });
+    expect(response.status === 201 || response.status === 200, `statut ${response.status} (${response.json?.code || response.json?.message})`);
+    const order = response.json?.order || {};
+    state.promoOrderId = orderIdOf(response.json);
+    expect(Math.abs(Number(order.totalPrice) - state.promoQuote.totalPrice) < 0.005, `total ${order.totalPrice}`);
+    expect(order.promoCode === promoCode && Number(order.discountAmount) > 0, 'code ou remise absents de la commande');
+  });
+
+  await step('un client ne réutilise pas le même code (PROMO_ALREADY_USED)', async () => {
+    const response = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items, promoCode } });
+    expectStatus(response, 409);
+    expect(response.json?.code === 'PROMO_ALREADY_USED', `code ${response.json?.code}`);
+  });
+
+  await step('annuler la commande libère le code', async () => {
+    expect(state.promoOrderId, 'commande promo absente');
+    const cancel = await call('PUT', `/orders/${state.promoOrderId}/status`, { token: state.client.token, body: { status: 'Annulée' } });
+    expectStatus(cancel, 200, 'annulation : ');
+    const again = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items, promoCode } });
+    expectStatus(again, 200, 'nouveau devis : ');
+    const list = await call('GET', '/admin/promo-codes', { token: state.admin.token });
+    const promo = (list.json?.promoCodes || []).find((item) => item.id === state.promoId);
+    expect(promo && promo.usedCount === 0, `utilisations ${promo?.usedCount}`);
+  });
+
+  await step('code désactivé refusé', async () => {
+    const off = await call('PATCH', `/admin/promo-codes/${state.promoId}`, { token: state.admin.token, body: { active: false } });
+    expectStatus(off, 200, 'désactivation : ');
+    const response = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items, promoCode } });
+    expectStatus(response, 409);
+    expect(response.json?.code === 'PROMO_INVALID', `code ${response.json?.code}`);
+  });
+
+  await step('un client ne peut ni créer ni lister les codes promo', async () => {
+    const create = await call('POST', '/admin/promo-codes', { token: state.client.token, body: { code: 'PIRATE10', type: 'percent', value: 90 } });
+    expect(create.status === 403 || create.status === 401, `création : ${create.status}`);
+    const list = await call('GET', '/admin/promo-codes', { token: state.client.token });
+    expect(list.status === 403 || list.status === 401, `liste : ${list.status}`);
+  });
+
+  // ─── Carnet d'adresses ───
+  await step('carnet d’adresses : ajout, adresse par défaut, suppression', async () => {
+    const first = await call('POST', '/users/me/addresses', { token: state.client.token, body: { label: 'Maison', address: 'Rue du Rhône 1, 1204 Genève' } });
+    expectStatus(first, 201, 'ajout 1 : ');
+    expect(first.json.addresses[0].isDefault === true, 'la première adresse doit être par défaut');
+    const second = await call('POST', '/users/me/addresses', { token: state.client.token, body: { label: 'Travail', address: 'Avenue de la Gare 4, 74100 Annemasse', isDefault: true } });
+    expectStatus(second, 201, 'ajout 2 : ');
+    expect(second.json.addresses.filter((a) => a.isDefault).length === 1, 'une seule adresse par défaut');
+    const tooShort = await call('POST', '/users/me/addresses', { token: state.client.token, body: { address: 'ab' } });
+    expectStatus(tooShort, 400, 'adresse trop courte : ');
+    const id = second.json.addresses.find((a) => a.label === 'Travail').id;
+    const removed = await call('DELETE', `/users/me/addresses/${id}`, { token: state.client.token });
+    expectStatus(removed, 200, 'suppression : ');
+    expect(removed.json.addresses.length === 1 && removed.json.addresses[0].isDefault, 'la première adresse doit redevenir par défaut');
+  });
+
+  await step('export des données personnelles (sans mot de passe)', async () => {
+    const response = await call('GET', '/users/me/export', { token: state.client.token });
+    expectStatus(response, 200);
+    const profile = response.json?.profile || {};
+    expect(Boolean(profile.email), `profil sans e-mail (clés : ${Object.keys(profile).slice(0, 12).join(',')})`);
+    expect(!('password' in profile), 'mot de passe exposé');
+    expect(Array.isArray(response.json?.orders) && response.json.orders.length > 0, 'commandes absentes');
+  });
+
+  // ─── Sessions et suppression de compte ───
+  await step('changer de mot de passe invalide les anciennes sessions', async () => {
+    const email = `e2e-session-${run}@afroeat.test`;
+    const password = strongPassword();
+    const created = await call('POST', '/users/register', { body: { name: 'Session E2E', email, password, role: 'client', phone: '+41791234567', address: 'Rue du Rhône 1, 1204 Genève', country: 'Suisse' } });
+    expectStatus(created, 201, 'inscription : ');
+    const session = await login(email, 'client', password);
+    expectStatus(await call('GET', '/users/me', { token: session.token }), 200, 'avant : ');
+    await new Promise((resolve) => setTimeout(resolve, 1100)); // les jetons sont datés à la seconde
+    const changed = await call('PUT', '/users/me/password', { token: session.token, body: { currentPassword: password, newPassword: strongPassword() } });
+    expectStatus(changed, 200, 'changement : ');
+    const after = await call('GET', '/users/me', { token: session.token });
+    expect(after.status === 401, `ancien jeton encore accepté (${after.status})`);
+  });
+
+  await step('suppression de compte : mot de passe exigé, compte anonymisé, connexion impossible', async () => {
+    const email = `e2e-delete-${run}@afroeat.test`;
+    const password = strongPassword();
+    const created = await call('POST', '/users/register', { body: { name: 'Supprime E2E', email, password, role: 'client', phone: '+41791234567', address: 'Rue du Rhône 1, 1204 Genève', country: 'Suisse' } });
+    expectStatus(created, 201, 'inscription : ');
+    const session = await login(email, 'client', password);
+    const wrong = await call('DELETE', '/users/me/account', { token: session.token, body: { password: 'Mauvais#123aA', confirmation: true } });
+    expectStatus(wrong, 401, 'mauvais mot de passe : ');
+    const removed = await call('DELETE', '/users/me/account', { token: session.token, body: { password, confirmation: true } });
+    expectStatus(removed, 200, 'suppression : ');
+    const relog = await call('POST', '/users/login', { body: { email, password, role: 'client' } });
+    expect(relog.status >= 400, `connexion encore possible (${relog.status})`);
+  });
+
+  await step('page publique de suppression de compte', async () => {
+    const response = await fetch(`${API}/users/account-deletion`);
+    expect(response.status === 200 && /Supprimer mon compte/.test(await response.text()), `statut ${response.status}`);
   });
 
   // ─── Invitation d'un nouveau restaurant partenaire ───
