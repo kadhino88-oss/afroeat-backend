@@ -133,11 +133,14 @@ const createAddress = async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: 'Utilisateur introuvable' });
     const result = addAddress(user.savedAddresses, parsed.value);
     if (result.error) return res.status(409).json({ success: false, code: 'ADDRESS_LIMIT', message: result.error });
-    user.savedAddresses = result.list;
+    // Mise à jour ciblée : ne jamais « save() » un compte chargé partiellement (les hooks réécriraient e-mail, nom…).
     const def = result.list.find((a) => a.isDefault);
-    if (def) user.address = def.address; // l'adresse par défaut alimente aussi le profil
-    await user.save({ validateBeforeSave: false });
-    return res.status(201).json({ success: true, addresses: toApi(user.savedAddresses) });
+    const updated = await User.findByIdAndUpdate(
+      user._id,
+      { $set: { savedAddresses: result.list, ...(def ? { address: def.address } : {}) } },
+      { returnDocument: 'after', select: 'savedAddresses' }
+    );
+    return res.status(201).json({ success: true, addresses: toApi(updated?.savedAddresses) });
   } catch (error) {
     console.error('Create address error:', error.message);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -149,11 +152,14 @@ const deleteAddress = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('savedAddresses address');
     if (!user) return res.status(404).json({ success: false, message: 'Utilisateur introuvable' });
-    user.savedAddresses = removeAddress(user.savedAddresses, req.params.id);
-    const def = user.savedAddresses.find((a) => a.isDefault);
-    if (def) user.address = def.address;
-    await user.save({ validateBeforeSave: false });
-    return res.json({ success: true, addresses: toApi(user.savedAddresses) });
+    const remaining = removeAddress(user.savedAddresses, req.params.id);
+    const def = remaining.find((a) => a.isDefault);
+    const updated = await User.findByIdAndUpdate(
+      user._id,
+      { $set: { savedAddresses: remaining, ...(def ? { address: def.address } : {}) } },
+      { returnDocument: 'after', select: 'savedAddresses' }
+    );
+    return res.json({ success: true, addresses: toApi(updated?.savedAddresses) });
   } catch (error) {
     console.error('Delete address error:', error.message);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
