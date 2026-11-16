@@ -320,12 +320,15 @@ userSchema.index({ isIdentityVerified: 1, isWorkAuthorized: 1 });
 
 userSchema.pre('validate', function () {
   try {
-    this.name = normalizeString(this.name);
-    this.email = normalizeEmail(this.email);
-    this.phone = normalizeString(this.phone);
-    this.address = normalizeString(this.address);
-    this.profileImage = normalizeString(this.profileImage);
-    this.verificationNotes = normalizeString(this.verificationNotes);
+    // Compte chargé partiellement (select) : on ne touche qu'aux champs réellement chargés.
+    // Sinon un champ absent serait « normalisé » en chaîne vide et écrasé en base (e-mail, nom, photo…).
+    const loaded = (path) => this.isNew || typeof this.isSelected !== 'function' || this.isSelected(path);
+    if (loaded('name')) this.name = normalizeString(this.name);
+    if (loaded('email')) this.email = normalizeEmail(this.email);
+    if (loaded('phone')) this.phone = normalizeString(this.phone);
+    if (loaded('address')) this.address = normalizeString(this.address);
+    if (loaded('profileImage')) this.profileImage = normalizeString(this.profileImage);
+    if (loaded('verificationNotes')) this.verificationNotes = normalizeString(this.verificationNotes);
 
     if (!this.name) {
       throw new Error('Le nom est obligatoire');
@@ -376,12 +379,15 @@ userSchema.pre('save', async function () {
       if (!this.isNew) this.passwordChangedAt = new Date();
     }
 
-    this.name = normalizeString(this.name);
-    this.email = normalizeEmail(this.email);
-    this.phone = normalizeString(this.phone);
-    this.address = normalizeString(this.address);
-    this.profileImage = normalizeString(this.profileImage);
-    this.verificationNotes = normalizeString(this.verificationNotes);
+    // Compte chargé partiellement (select) : on ne touche qu'aux champs réellement chargés.
+    // Sinon un champ absent serait « normalisé » en chaîne vide et écrasé en base (e-mail, nom, photo…).
+    const loaded = (path) => this.isNew || typeof this.isSelected !== 'function' || this.isSelected(path);
+    if (loaded('name')) this.name = normalizeString(this.name);
+    if (loaded('email')) this.email = normalizeEmail(this.email);
+    if (loaded('phone')) this.phone = normalizeString(this.phone);
+    if (loaded('address')) this.address = normalizeString(this.address);
+    if (loaded('profileImage')) this.profileImage = normalizeString(this.profileImage);
+    if (loaded('verificationNotes')) this.verificationNotes = normalizeString(this.verificationNotes);
 
     if (this.documents?.identity) {
       this.documents.identity.frontUrl = normalizeString(
