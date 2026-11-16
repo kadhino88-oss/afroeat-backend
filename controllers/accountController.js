@@ -97,7 +97,9 @@ const exportMyData = async (req, res) => {
       SupportTicket.find({ user: user._id }).sort({ createdAt: -1 }).limit(200).lean(),
     ]);
 
-    const { passwordResetTokenHash, passwordResetExpires, pushToken, ...profile } = user;
+    // Copie sans aucun secret : mot de passe, jetons de réinitialisation, secrets de double authentification.
+    const { password, passwordResetTokenHash, passwordResetExpires, pushToken, twoFactor, ...profile } = user;
+    if (twoFactor) profile.twoFactorEnabled = Boolean(twoFactor.enabled);
     res.set('Cache-Control', 'no-store');
     res.set('Content-Disposition', 'attachment; filename="afroeat-mes-donnees.json"');
     return res.json({ exportedAt: new Date().toISOString(), profile, orders, supportTickets: tickets });

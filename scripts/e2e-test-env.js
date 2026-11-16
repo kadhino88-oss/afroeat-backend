@@ -379,7 +379,9 @@ const main = async () => {
   await step('export des données personnelles (sans mot de passe)', async () => {
     const response = await call('GET', '/users/me/export', { token: state.client.token });
     expectStatus(response, 200);
-    expect(response.json?.profile?.email && !('password' in response.json.profile), 'profil absent ou mot de passe exposé');
+    const profile = response.json?.profile || {};
+    expect(Boolean(profile.email), `profil sans e-mail (clés : ${Object.keys(profile).slice(0, 12).join(',')})`);
+    expect(!('password' in profile), 'mot de passe exposé');
     expect(Array.isArray(response.json?.orders) && response.json.orders.length > 0, 'commandes absentes');
   });
 
