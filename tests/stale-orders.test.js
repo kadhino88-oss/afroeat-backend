@@ -55,3 +55,22 @@ test('commandes sans réponse : annulées et remboursées ; paiement abandonné 
   assert.equal(abandoned.status, 'Annulée');
   assert.deepEqual(notified, ['o1']);
 });
+
+test('un remboursement réussi passe la commande en « Remboursé » sans attendre le webhook', async () => {
+  const stripe = { refunds: { create: async () => ({ id: 're_1', status: 'succeeded', amount: 200 }) } };
+  const order = makeOrder({ status: 'Annulée' });
+  await refundCancelledOrder(order, stripe);
+  assert.equal(order.paymentStatus, 'Remboursé');
+  assert.equal(order.stripeRefundId, 're_1');
+  assert.equal(order.stripeAmountRefunded, 2);
+  assert.ok(order.refundedAt);
+});
+
+test('le rapprochement rattrape un remboursement dont le webhook n’est jamais arrivé', async () => {
+  const { reconcileRefunds } = require('../utils/orderRefund');
+  const order = makeOrder({ status: 'Annulée', refundRequestedAt: new Date(), refundedAt: null });
+  const Order = { find: () => ({ limit: async () => [order] }) };
+  const stripe = { refunds: { list: async () => ({ data: [{ id: 're_2', status: 'succeeded', amount: 200 }] }) } };
+  assert.equal(await reconcileRefunds({ Order, stripe }), 1);
+  assert.equal(order.paymentStatus, 'Remboursé');
+});

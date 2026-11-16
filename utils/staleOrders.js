@@ -1,7 +1,7 @@
 'use strict';
 
 // Commandes restées sans suite : annulées automatiquement (et remboursées si déjà payées).
-const { refundCancelledOrder } = require('./orderRefund');
+const { refundCancelledOrder, reconcileRefunds } = require('./orderRefund');
 const { releasePromoForOrder } = require('./promoCodes');
 
 const DEFAULTS = {
@@ -57,7 +57,9 @@ const maybeExpireStaleOrders = async (deps, minIntervalMs = 60000) => {
   if (Date.now() - lastRun < minIntervalMs) return null;
   lastRun = Date.now();
   try {
-    return await expireStaleOrders(deps);
+    const out = await expireStaleOrders(deps);
+    await reconcileRefunds(deps).catch(() => {});
+    return out;
   } catch (error) {
     console.error('Annulation des commandes en attente :', error.message);
     return null;
