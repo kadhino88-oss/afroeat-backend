@@ -41,3 +41,12 @@ test('modèles : mode de livraison sur le commerce et sur la commande', () => {
   assert.equal(new Restaurant({}).selfDelivery, false);
   assert.equal(new Order({}).selfDelivery, false);
 });
+
+test('à emporter : le restaurant remet la commande (Livrée), aucun livreur', () => {
+  const { canTransitionStatus } = require('../controllers/orderController');
+  assert.equal(canTransitionStatus('En préparation', 'Livrée', 'restaurant', { selfDelivery: true, pickup: true }), true);
+  assert.equal(canTransitionStatus('Confirmée', 'Livrée', 'restaurant', { selfDelivery: true, pickup: true }), true);
+  assert.equal(canTransitionStatus('En préparation', 'En livraison', 'restaurant', { selfDelivery: true, pickup: true }), false);
+  assert.equal(canTransitionStatus('En préparation', 'En livraison', 'livreur', { selfDelivery: true, pickup: true }), false);
+  assert.equal(canTransitionStatus('En préparation', 'Livrée', 'restaurant', {}), false, 'en livraison classique, le restaurant ne marque pas « livrée »');
+});
