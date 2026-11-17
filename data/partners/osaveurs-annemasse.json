@@ -1,0 +1,454 @@
+{
+  "key": "osaveurs-annemasse",
+  "owner": {
+    "name": "Ô Saveurs d'Afrique",
+    "email": "osaveursdafriqueannemasse@gmail.com",
+    "phone": "+33450807813"
+  },
+  "restaurant": {
+    "name": "Ô Saveurs d'Afrique",
+    "description": "Restaurant africain à Annemasse : tchèp, yassa, mafé, sauces, soupes, grillades et spécialités ivoiriennes et sénégalaises.",
+    "cuisine": "Africaine",
+    "businessType": "restaurant",
+    "phone": "+33450807813",
+    "email": "osaveursdafriqueannemasse@gmail.com",
+    "address": "14 B Rue du Commerce, 74100 Annemasse",
+    "city": "Annemasse",
+    "country": "France",
+    "postalCode": "74100",
+    "currency": "EUR",
+    "coverImage": "https://cdn.website.dish.co/media/0b/b3/6707769/O-SAVEUR-D-AFRIQUE-03aefa4c-31a9-46d1-974e-d2eeb7f8a92a-jpeg.jpg",
+    "image": "https://cdn.website.dish.co/media/10/9b/6707788/O-SAVEUR-D-AFRIQUE-123b5f89-1fba-4af9-a0e9-b0c1082ed27c-jpeg.jpg",
+    "location": {
+      "latitude": 46.193,
+      "longitude": 6.2375
+    }
+  },
+  "source": "https://o-saveur-d-afrique.eatbu.com (menu et photos fournis par le restaurant partenaire)",
+  "items": [
+    {
+      "category": "Entrées",
+      "name": "Pastels (viande ou poisson)",
+      "price": 7,
+      "description": "Beignets farcis à la viande ou au poisson. Accompagnés de salade.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Entrées",
+      "name": "Samoussas",
+      "price": 7,
+      "description": "Accompagnés de salade.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Entrées",
+      "name": "Gésiers de poulet",
+      "price": 7,
+      "description": "Accompagnés de salade.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Entrées",
+      "name": "Ailes de poulet",
+      "price": 10,
+      "description": "Accompagnées de salade.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Plats de résistance",
+      "name": "Tchèp rouge poisson",
+      "price": 20,
+      "description": "Riz au poisson façon tiéboudienne rouge.",
+      "containsAlcohol": false,
+      "isPopular": true
+    },
+    {
+      "category": "Plats de résistance",
+      "name": "Tchèp rouge viande",
+      "price": 18,
+      "description": "Riz à la viande façon tiéboudienne rouge.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Plats de résistance",
+      "name": "Yassa poulet",
+      "price": 17,
+      "description": "Poulet mariné, sauce aux oignons.",
+      "containsAlcohol": false,
+      "isPopular": true
+    },
+    {
+      "category": "Plats de résistance",
+      "name": "Yassa poisson",
+      "price": 17,
+      "description": "Poisson mariné, sauce aux oignons.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Plats de résistance",
+      "name": "Mafé poulet",
+      "price": 17,
+      "description": "Poulet, sauce à la pâte d’arachide.",
+      "containsAlcohol": false,
+      "isPopular": true
+    },
+    {
+      "category": "Plats de résistance",
+      "name": "Mafé poisson",
+      "price": 18,
+      "description": "Poisson, sauce à la pâte d’arachide.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Plats de résistance",
+      "name": "Spaghetti rognons ou gésiers",
+      "price": 12,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Sauces et soupes",
+      "name": "Sauce simple",
+      "price": 15,
+      "description": "Au choix : gombo, graine (jus de palme), mafé (arachide) ou feuille de patate.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Sauces et soupes",
+      "name": "Sauce avec foutou",
+      "price": 18,
+      "description": "Au choix : gombo, graine, mafé ou feuille de patate, servie avec du foutou.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Sauces et soupes",
+      "name": "Sauce avec riz",
+      "price": 17,
+      "description": "Au choix : gombo, graine, mafé ou feuille de patate, servie avec du riz.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Sauces et soupes",
+      "name": "Soupe de tripes et pattes de veau",
+      "price": 17,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Sauces et soupes",
+      "name": "Soupe de pintade",
+      "price": 17,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Sauces et soupes",
+      "name": "Soupe de machoiron",
+      "price": 20,
+      "description": "Soupe de poisson machoiron.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Sauces et soupes",
+      "name": "Soupe du pêcheur",
+      "price": 25,
+      "description": "Uniquement le dimanche.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Grillades et fritures",
+      "name": "Poulet braisé",
+      "price": 17,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": true
+    },
+    {
+      "category": "Grillades et fritures",
+      "name": "Tilapia braisé",
+      "price": 20,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Grillades et fritures",
+      "name": "Tilapia grillé",
+      "price": 15,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Grillades et fritures",
+      "name": "Capitaine braisé",
+      "price": 25,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Grillades et fritures",
+      "name": "Capitaine grillé",
+      "price": 17,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Grillades et fritures",
+      "name": "Pintade braisée",
+      "price": 25,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Grillades et fritures",
+      "name": "Garba thon",
+      "price": 16,
+      "description": "Attiéké et thon frit, piment et oignons.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Grillades et fritures",
+      "name": "Choukouya",
+      "price": 23,
+      "description": "Viande grillée à l’oignon et aux épices.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Accompagnements",
+      "name": "Attiéké",
+      "price": 5,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Accompagnements",
+      "name": "Alloco",
+      "price": 5,
+      "description": "Bananes plantain frites.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Accompagnements",
+      "name": "Riz",
+      "price": 5,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Accompagnements",
+      "name": "Chikwangue",
+      "price": 5,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Accompagnements",
+      "name": "Igname",
+      "price": 5,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Accompagnements",
+      "name": "Foutou",
+      "price": 7,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Accompagnements",
+      "name": "Riz de tchèp",
+      "price": 10,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Accompagnements",
+      "name": "Sauce oignon ou piment",
+      "price": 0.7,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Accompagnements",
+      "name": "Foufou",
+      "price": 7,
+      "description": "Uniquement le dimanche.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Menu enfant",
+      "name": "Menu enfant",
+      "price": 10,
+      "description": "Wings et alloco, ou wings et frites, avec un jus ou une compote.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Desserts",
+      "name": "Dèguè",
+      "price": 5,
+      "description": "Dessert au lait caillé et mil.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Desserts",
+      "name": "Tarte au citron",
+      "price": 5,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Soda (Coca, Fanta, Sprite)",
+      "price": 3,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Jus de gingembre",
+      "price": 5,
+      "description": "Fait maison.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Jus de bissap",
+      "price": 5,
+      "description": "Fait maison.",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Red Bull",
+      "price": 5,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Top",
+      "price": 8,
+      "description": "",
+      "containsAlcohol": false,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Guinness (33 cl)",
+      "price": 10,
+      "description": "",
+      "containsAlcohol": true,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Heineken (33 cl)",
+      "price": 10,
+      "description": "",
+      "containsAlcohol": true,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Desperados (33 cl)",
+      "price": 10,
+      "description": "",
+      "containsAlcohol": true,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Whisky (10 cl)",
+      "price": 10,
+      "description": "",
+      "containsAlcohol": true,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Champagne (75 cl)",
+      "price": 50,
+      "description": "À partir de 50 € (jusqu’à 80 € selon la marque).",
+      "containsAlcohol": true,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Chivas (70 cl)",
+      "price": 70,
+      "description": "",
+      "containsAlcohol": true,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Chivas (½ bouteille)",
+      "price": 40,
+      "description": "",
+      "containsAlcohol": true,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Jack Daniel’s (70 cl)",
+      "price": 60,
+      "description": "",
+      "containsAlcohol": true,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Jack Daniel’s (½ bouteille)",
+      "price": 35,
+      "description": "",
+      "containsAlcohol": true,
+      "isPopular": false
+    },
+    {
+      "category": "Boissons",
+      "name": "Vodka (70 cl)",
+      "price": 60,
+      "description": "",
+      "containsAlcohol": true,
+      "isPopular": false
+    }
+  ]
+}
