@@ -29,11 +29,15 @@ const distanceKm = (a, b) => {
 };
 
 /** Filtre Mongo des commandes qu'un livreur peut prendre. */
-const availableOrderFilter = () => ({
+const availableOrderFilter = (now = Date.now()) => ({
   status: { $in: OPEN_ORDER_STATUSES },
   paymentStatus: 'Payé',
   selfDelivery: { $ne: true },
-  $or: [{ deliveryPerson: null }, { deliveryPerson: { $exists: false } }],
+  $and: [
+    { $or: [{ deliveryPerson: null }, { deliveryPerson: { $exists: false } }] },
+    // Commande programmée : proposée aux livreurs 45 minutes avant l'heure prévue.
+    { $or: [{ scheduledFor: null }, { scheduledFor: { $exists: false } }, { scheduledFor: { $lte: new Date(now + 45 * 60000) } }] },
+  ],
 });
 
 const courierPoint = (courier, now = Date.now()) => {
@@ -88,6 +92,8 @@ const notifyRestaurantNewOrder = async (order) => {
 const notifyNearbyCouriers = async (order) => {
   try {
     if (order.selfDelivery === true || order.deliveryPerson) return 0;
+    // Programmée loin dans le temps : les livreurs la verront dans leur liste à l'approche de l'heure.
+    if (!require('./scheduling').isDueForDispatch(order)) return 0;
     const User = require('../models/User');
     const Restaurant = require('../models/Restaurant');
     const { sendPushToUser } = require('./pushNotifications');
