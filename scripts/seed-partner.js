@@ -37,8 +37,10 @@ const loadPartner = (key) => {
   if (!data.owner?.email || !data.restaurant?.name || !Array.isArray(data.items)) {
     throw new Error('Fichier partenaire incomplet (owner.email, restaurant.name, items).');
   }
-  const logoFile = mediaPath(key, data.logoMedia);
-  if (logoFile && !fs.existsSync(logoFile)) throw new Error(`Logo introuvable : ${data.logoMedia}`);
+  for (const field of ['logoMedia', 'coverMedia']) {
+    const file = mediaPath(key, data[field]);
+    if (file && !fs.existsSync(file)) throw new Error(`Image introuvable : ${data[field]}`);
+  }
   for (const item of data.items) {
     if (!item.name || !Number.isFinite(item.price) || item.price < 0) {
       throw new Error(`Plat invalide : ${JSON.stringify(item)}`);
@@ -138,6 +140,23 @@ const main = async () => {
         { $set: { logo: `${PUBLIC_API_URL}/api/images/${image._id}` } }
       );
       console.log('Logo ajouté.');
+    }
+  }
+
+  // Couverture : remplace seulement la couverture d'origine de l'import (ou une couverture vide) ;
+  // une couverture choisie ensuite dans l'administration n'est jamais touchée.
+  const coverFile = mediaPath(process.env.PARTNER, data.coverMedia);
+  if (coverFile) {
+    const current = await Restaurant.findById(restaurant._id).select('coverImage');
+    const original = data.restaurant.coverImage || '';
+    if (!current?.coverImage || current.coverImage === original) {
+      const bytes = fs.readFileSync(coverFile);
+      const image = await UploadedImage.create({ owner: owner._id, contentType: 'image/jpeg', data: bytes, size: bytes.length });
+      await Restaurant.updateOne(
+        { _id: restaurant._id, coverImage: { $in: ['', null, original] } },
+        { $set: { coverImage: `${PUBLIC_API_URL}/api/images/${image._id}` } }
+      );
+      console.log('Couverture remplacée.');
     }
   }
 

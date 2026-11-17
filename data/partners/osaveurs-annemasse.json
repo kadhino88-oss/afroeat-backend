@@ -505,5 +505,6 @@
     }
   ],
   "claimsPlace": "curated/o-saveurs-d-afrique-annemasse",
-  "logoMedia": "logo.jpg"
+  "logoMedia": "logo.jpg",
+  "coverMedia": "cover.jpg"
 }
