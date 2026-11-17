@@ -10,6 +10,13 @@ const resolvePromo = async ({ rawCode, userId, subtotal, deliveryFee, currency, 
   if (!code) return { ok: true, discount: 0, promo: null };
   if (!userId) return { ok: false, code: 'PROMO_LOGIN', message: 'Connecte-toi pour utiliser un code promo.' };
   const promo = await PromoCode.findOne({ code });
+  // Récompense de parrainage réservée à un client ; on ne peut pas utiliser son propre code de parrainage.
+  if (promo?.restrictedTo && String(promo.restrictedTo) !== String(userId)) {
+    return { ok: false, code: 'PROMO_INVALID', message: 'Ce code promo n’existe pas ou n’est plus actif.' };
+  }
+  if (promo?.owner && String(promo.owner) === String(userId)) {
+    return { ok: false, code: 'PROMO_OWN_CODE', message: 'Partagez ce code avec vos amis : il ne s’applique pas à vos propres commandes.' };
+  }
   const [userRedemptions, hasPaidOrder] = await Promise.all([
     Order.countDocuments({ user: userId, promoCode: code, status: { $ne: 'Annulée' } }),
     Order.exists({ user: userId, paymentStatus: 'Payé', status: { $ne: 'Annulée' } }),
@@ -66,7 +73,7 @@ const parseAdminInput = (body = {}) => {
 };
 
 const listPromos = async (req, res) => {
-  const promos = await PromoCode.find().sort({ createdAt: -1 }).limit(200);
+  const promos = await PromoCode.find({ kind: { $nin: ['referral', 'referral_reward'] } }).sort({ createdAt: -1 }).limit(200);
   return res.json({ success: true, promoCodes: promos.map(toApi) });
 };
 
@@ -90,3 +97,35 @@ const setPromoActive = async (req, res) => {
 };
 
 module.exports = { resolvePromo, claimPromoUse, parseAdminInput, listPromos, createPromo, setPromoActive };
+
+// --- Parrainage -----------------------------------------------------------
+
+/** GET /api/users/me/referral — code personnel, nombre d'amis parrainés et récompenses disponibles. */
+const getMyReferral = async (req, res) => {
+  try {
+    const { getOrCreateReferralCode, REFERRAL_PERCENT, REWARD_PERCENT } = require('../utils/referral');
+    const promo = await getOrCreateReferralCode(req.user, PromoCode);
+    const rewards = await PromoCode.find({
+      kind: 'referral_reward',
+      restrictedTo: req.user._id,
+      active: true,
+      $expr: { $lt: ['$usedCount', '$maxUses'] },
+      $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+    }).select('code value expiresAt');
+    return res.json({
+      success: true,
+      referral: {
+        code: promo.code,
+        friendPercent: REFERRAL_PERCENT,
+        rewardPercent: REWARD_PERCENT,
+        friendsCount: promo.usedCount || 0,
+        rewards: rewards.map((r) => ({ code: r.code, percent: r.value, expiresAt: r.expiresAt })),
+      },
+    });
+  } catch (error) {
+    console.error('Referral error:', error.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+};
+
+module.exports.getMyReferral = getMyReferral;

@@ -412,6 +412,16 @@ const main = async () => {
     return `−${quote.discountAmount} CHF`;
   });
 
+  await step('parrainage : code personnel, refusé sur ses propres commandes', async () => {
+    const response = await call('GET', '/users/me/referral', { token: state.client.token });
+    expectStatus(response, 200);
+    const code = response.json?.referral?.code;
+    expect(/^[A-Z]+-[A-Z0-9]{4}$/.test(code || ''), `code ${code}`);
+    const own = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items, promoCode: code } });
+    expect(own.status === 409 && own.json?.code === 'PROMO_OWN_CODE', `propre code accepté (${own.status} ${own.json?.code})`);
+    return code;
+  });
+
   await step('code inconnu refusé (PROMO_INVALID)', async () => {
     const response = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items, promoCode: 'NEXISTEPAS' } });
     expectStatus(response, 409);

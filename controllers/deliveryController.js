@@ -764,6 +764,8 @@ const updateDeliveryMissionStatus = async (req, res) => {
         // Delivery status is persisted even if external Stripe reconciliation fails.
         console.error('AFROEAT PAYOUT RECONCILIATION ERROR =>', payoutError?.message);
       }
+      // Parrainage : récompense du parrain quand la commande de son ami est livrée.
+      await require('../utils/referral').rewardReferrerForOrder(order, require('../models/PromoCode')).catch((e) => console.error('Parrainage :', e.message));
     }
 
     sendPushToUser(order.user, {

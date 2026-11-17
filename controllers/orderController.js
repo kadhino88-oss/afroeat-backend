@@ -1141,6 +1141,8 @@ const updateOrderStatus = async (req, res) => {
         // Delivery remains saved; payout reconciliation is retried through admin endpoints.
         console.error('AFROEAT PAYOUT RECONCILIATION ERROR =>', payoutError?.message);
       }
+      // Parrainage : récompense du parrain quand la commande de son ami est livrée.
+      await require('../utils/referral').rewardReferrerForOrder(order, require('../models/PromoCode')).catch((e) => console.error('Parrainage :', e.message));
     }
 
     if (nextStatus === 'Annulée') {
