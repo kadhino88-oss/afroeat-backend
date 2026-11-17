@@ -63,6 +63,12 @@ const menuItemSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Boisson ou produit alcoolisé : contrôle de l'âge à la commande et à la livraison.
+    containsAlcohol: {
+      type: Boolean,
+      default: false,
+    },
+
     isPopular: {
       type: Boolean,
       default: false,
