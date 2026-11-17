@@ -2,6 +2,7 @@
 
 const Place = require('../models/Place');
 const { SALON_SHOPS } = require('./osmPlaces');
+const { cleanWebsite, cleanImageUrl } = require('./placeLinks');
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 3000;
 
@@ -22,9 +23,9 @@ const toApi = (doc) => {
     address: doc.address || '',
     city: doc.city || '',
     phone: doc.phone || '',
-    website: doc.website || '',
-    imageUrl: doc.imageUrl || '',
-    logoUrl: doc.logoUrl || '',
+    website: cleanWebsite(doc.website),
+    imageUrl: cleanImageUrl(doc.imageUrl),
+    logoUrl: cleanImageUrl(doc.logoUrl),
     openingHours: doc.openingHours || '',
     isAfrican: Boolean(doc.isAfrican),
     latitude: lat,
