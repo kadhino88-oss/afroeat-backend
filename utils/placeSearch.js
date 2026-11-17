@@ -23,6 +23,8 @@ const toApi = (doc) => {
     city: doc.city || '',
     phone: doc.phone || '',
     website: doc.website || '',
+    imageUrl: doc.imageUrl || '',
+    logoUrl: doc.logoUrl || '',
     openingHours: doc.openingHours || '',
     isAfrican: Boolean(doc.isAfrican),
     latitude: lat,
