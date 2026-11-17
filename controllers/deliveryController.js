@@ -6,7 +6,14 @@ const { sendPushToUser } = require('../utils/pushNotifications');
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
 const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
 const { sanitizeOrderForViewer } = require('../utils/orderResponseSanitizer');
-const { evaluateCourierAvailabilityChange } = require('../utils/courierAssignmentEligibility');
+const { evaluateCourierAvailabilityChange, evaluateCourierAssignmentEligibility } = require('../utils/courierAssignmentEligibility');
+const {
+  availableOrderFilter,
+  courierPoint,
+  restaurantPoint,
+  distanceKm,
+  isWithinDispatchRadius,
+} = require('../utils/courierDispatch');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const normalizeString = (value) => String(value || '').trim();
@@ -949,7 +956,123 @@ const getMyDeliveryStats = async (req, res) => {
   }
 };
 
+/**
+ * Courses disponibles pour le livreur connecté (payées, livrées par AFROEAT, sans livreur, à proximité).
+ * Aperçu minimal avant acceptation : pas de nom ni de téléphone du client, seulement la ville de livraison.
+ */
+const getAvailableDeliveryOrders = async (req, res) => {
+  try {
+    const courier = await User.findById(req.user?._id).select(
+      '_id role accountStatus isIdentityVerified isWorkAuthorized isAvailable deliveryProfile'
+    );
+    const eligibility = evaluateCourierAssignmentEligibility(courier);
+    if (!eligibility.ok) {
+      return res.status(200).json({ success: true, count: 0, orders: [], blockedReason: eligibility.code });
+    }
+
+    const orders = await Order.find(availableOrderFilter())
+      .populate('restaurant', 'name address city location latitude longitude')
+      .sort({ paidAt: 1, createdAt: 1 })
+      .limit(50);
+
+    const here = courierPoint(courier);
+    const offers = orders
+      .map((order) => {
+        const pickup = restaurantPoint(order);
+        return { order, pickup, distance: distanceKm(here, pickup) };
+      })
+      .filter(({ pickup }) => isWithinDispatchRadius(here, pickup))
+      .map(({ order, distance }) => ({
+        _id: order._id,
+        status: order.status,
+        restaurantName: order.restaurant?.name || '',
+        restaurantAddress: order.restaurant?.address || '',
+        restaurantCity: order.restaurant?.city || '',
+        deliveryCity: order.deliveryAddress?.city || '',
+        itemsCount: (order.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),
+        driverEarning: roundMoney(order.driverEarning || 0),
+        currency: order.currency || '',
+        distanceToPickupKm: distance,
+        paidAt: order.paidAt || order.createdAt,
+      }));
+
+    return res.status(200).json({ success: true, count: offers.length, orders: offers });
+  } catch (error) {
+    console.error('DELIVERY AVAILABLE ORDERS ERROR =>', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+};
+
+/** Le livreur accepte une course disponible : le premier qui accepte l'obtient. */
+const acceptDeliveryOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: 'ID commande invalide.' });
+    }
+
+    const courier = await User.findById(req.user?._id).select(
+      '_id role accountStatus isIdentityVerified isWorkAuthorized isAvailable name'
+    );
+    const eligibility = evaluateCourierAssignmentEligibility(courier);
+    if (!eligibility.ok) {
+      return res.status(eligibility.status).json({ success: false, code: eligibility.code, message: eligibility.message });
+    }
+
+    const busy = await Order.exists({ deliveryPerson: courier._id, status: { $in: ['Confirmée', 'En préparation', 'En livraison'] } });
+    if (busy) {
+      return res.status(409).json({
+        success: false,
+        code: 'COURIER_BUSY',
+        message: 'Terminez votre course en cours avant d’en accepter une autre.',
+      });
+    }
+
+    // Attribution atomique : si un autre livreur a accepté entre-temps, rien n'est modifié.
+    const order = await Order.findOneAndUpdate(
+      { _id: id, ...availableOrderFilter() },
+      { $set: { deliveryPerson: courier._id } },
+      { new: true }
+    );
+
+    if (!order) {
+      return res.status(409).json({
+        success: false,
+        code: 'ORDER_ALREADY_TAKEN',
+        message: 'Cette course n’est plus disponible : un autre livreur l’a acceptée.',
+      });
+    }
+
+    order.statusHistory.push({
+      status: order.status,
+      updatedBy: courier._id,
+      updatedByRole: 'livreur',
+      note: `Course acceptée par ${courier.name || 'le livreur'}`,
+      at: new Date(),
+    });
+    await order.save();
+
+    sendPushToUser(order.user, {
+      title: 'AFROEAT',
+      body: 'Un livreur a accepté votre commande.',
+      data: { orderId: String(order._id), type: 'courier_assigned' },
+    }).catch(() => {});
+
+    const populated = await populateOrder(Order.findById(order._id));
+    return res.status(200).json({
+      success: true,
+      message: 'Course acceptée.',
+      order: buildOrderLiveMeta(populated),
+    });
+  } catch (error) {
+    console.error('DELIVERY ACCEPT ORDER ERROR =>', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+};
+
 module.exports = {
+  getAvailableDeliveryOrders,
+  acceptDeliveryOrder,
   getMyDeliveryProfile,
   getAssignedDeliveryOrders,
   getCurrentDeliveryOrder,

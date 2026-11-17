@@ -5,6 +5,8 @@ const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
 const {
+  getAvailableDeliveryOrders,
+  acceptDeliveryOrder,
   getMyDeliveryProfile,
   getAssignedDeliveryOrders,
   getCurrentDeliveryOrder,
@@ -48,6 +50,8 @@ router.get('/earnings', getMyDeliveryEarnings);
 /**
  * Delivery missions / orders
  */
+router.get('/available-orders', getAvailableDeliveryOrders);
+router.post('/orders/:id/accept', acceptDeliveryOrder);
 router.get('/orders', getAssignedDeliveryOrders);
 router.get('/current-order', getCurrentDeliveryOrder);
 router.get('/orders/:id', getDeliveryOrderById);
