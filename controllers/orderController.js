@@ -16,6 +16,7 @@ const {
 } = require('../utils/orderPricing');
 
 const { sendPushToUser } = require('../utils/pushNotifications');
+const { parseTip, applyTipToSplit } = require('../utils/tips');
 const { refundCancelledOrder } = require('../utils/orderRefund');
 const PromoCode = require('../models/PromoCode');
 const { resolvePromo, claimPromoUse } = require('./promoController');
@@ -349,6 +350,7 @@ const sanitizeOrderForResponse = (orderDocument, viewerRole = '') => {
     totalPrice: roundMoney(order?.totalPrice),
     deliveryFee: roundMoney(order?.deliveryFee),
     donationAmount: roundMoney(order?.donationAmount),
+    tipAmount: roundMoney(order?.tipAmount),
     currency: normalizeString(order?.currency, 'EUR'),
   };
   const role = String(viewerRole || '').trim().toLowerCase();
@@ -875,7 +877,11 @@ const createOrder = async (req, res) => {
     }
 
     const selfDelivery = restaurantExists.selfDelivery === true;
-    const marketplaceSplit = calculateMarketplaceSplit({
+    const tip = parseTip(req.body?.tipAmount);
+    if (!tip.ok) {
+      return res.status(400).json({ success: false, code: tip.code, message: tip.message });
+    }
+    const baseSplit = calculateMarketplaceSplit({
       itemsSubtotal: pricing.subtotal,
       deliveryFee: pricing.deliveryFee,
       rates: marketplaceRates,
@@ -889,13 +895,15 @@ const createOrder = async (req, res) => {
       subtotal: pricing.subtotal,
       deliveryFee: pricing.deliveryFee,
       currency: pricing.currency,
-      split: marketplaceSplit,
+      split: baseSplit,
     });
     if (!promoResult.ok) {
       return res.status(409).json({ success: false, code: promoResult.code, message: promoResult.message });
     }
+    // Le pourboire s'ajoute après la remise : il n'entre ni dans la commission ni dans le calcul du code promo.
+    const marketplaceSplit = applyTipToSplit(baseSplit, tip.amount, selfDelivery);
     const discountAmount = promoResult.discount || 0;
-    const finalTotal = roundMoney(pricing.totalPrice - discountAmount);
+    const finalTotal = roundMoney(pricing.totalPrice - discountAmount + tip.amount);
 
     // Le client affiche un devis avant de valider : si le serveur recalcule autre chose
     // (prix modifié, frais de livraison changés), on refuse et on lui renvoie le nouveau devis.
@@ -940,6 +948,7 @@ const createOrder = async (req, res) => {
       restaurantLocation: safeRestaurantLocation,
       deliveryFee: pricing.deliveryFee,
       donationAmount: 0,
+      tipAmount: tip.amount,
       promoCode: promoResult.promo?.code || '',
       discountAmount,
       containsAlcohol,
@@ -1473,6 +1482,11 @@ const getOrderQuote = async (req, res) => {
       promoQuote = resolved;
     }
 
+    const quoteTip = parseTip(req.body?.tipAmount);
+    if (!quoteTip.ok) {
+      return res.status(400).json({ success: false, code: quoteTip.code, message: quoteTip.message });
+    }
+
     return res.status(200).json({
       success: true,
       quote: {
@@ -1488,7 +1502,8 @@ const getOrderQuote = async (req, res) => {
         deliveryFee: pricing.deliveryFee,
         discountAmount: promoQuote.discount || 0,
         promoCode: promoQuote.promo?.code || '',
-        totalPrice: roundMoney(pricing.totalPrice - (promoQuote.discount || 0)),
+        tipAmount: quoteTip.amount,
+        totalPrice: roundMoney(pricing.totalPrice - (promoQuote.discount || 0) + quoteTip.amount),
         currency: pricing.currency,
         containsAlcohol: orderContainsAlcohol(menuItems),
       },

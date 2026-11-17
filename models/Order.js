@@ -276,6 +276,18 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    // Pourboire du client : versé à 100 % à la personne qui livre (aucune commission).
+    tipAmount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Le pourboire ne peut pas être négatif'],
+      max: [50, 'Le pourboire semble anormalement élevé'],
+      validate: {
+        validator: Number.isFinite,
+        message: 'Le pourboire est invalide',
+      },
+    },
+
     driverEarning: {
       type: Number,
       default: 0,
@@ -693,6 +705,9 @@ orderSchema.pre('save', function () {
   const normalizedDonationAmount = roundMoney(this.donationAmount);
   this.donationAmount = normalizedDonationAmount;
 
+  const normalizedTipAmount = roundMoney(this.tipAmount || 0);
+  this.tipAmount = normalizedTipAmount;
+
   if (Array.isArray(this.items) && this.items.length > 0) {
     const calculatedItemsTotal = this.items.reduce((acc, item) => {
       const price = normalizeNumber(item.price, 0);
@@ -704,7 +719,7 @@ orderSchema.pre('save', function () {
     this.totalPrice = roundMoney(
       Math.max(
         0,
-        itemsSubtotal + normalizedDeliveryFee + normalizedDonationAmount - roundMoney(this.discountAmount || 0)
+        itemsSubtotal + normalizedDeliveryFee + normalizedDonationAmount + normalizedTipAmount - roundMoney(this.discountAmount || 0)
       )
     );
   } else {
