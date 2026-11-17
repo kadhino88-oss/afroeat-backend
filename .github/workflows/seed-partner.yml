@@ -1,0 +1,35 @@
+name: Ajouter un commerce partenaire (base officielle)
+
+# Bouton manuel : crée ou met à jour un commerce et son menu depuis data/partners/<clé>.json.
+# La fiche est créée masquée ; l'administrateur l'active après validation des prix avec le partenaire.
+# Secret requis : PLACES_MONGO_URI (la base officielle).
+on:
+  workflow_dispatch:
+    inputs:
+      partner:
+        description: "Clé du partenaire (nom du fichier dans data/partners, sans .json)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  seed-partner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Créer ou mettre à jour le partenaire
+        env:
+          MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
+          PARTNER: ${{ inputs.partner }}
+        run: node scripts/seed-partner.js
