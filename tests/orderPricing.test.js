@@ -71,14 +71,14 @@ test('rejects unavailable items and items belonging to another restaurant', () =
 test('uses restaurant currency and delivery fee to calculate order total', () => {
   const pricing = calculateRestaurantPricing({
     items: [{ price: 15.5, quantity: 2 }],
-    restaurant: { currency: 'CHF', deliveryFee: 3.25, minimumOrderAmount: 20 },
+    restaurant: { currency: 'CHF', deliveryFee: 5.25, minimumOrderAmount: 20 },
   });
   assert.equal(pricing.ok, true);
   assert.equal(pricing.subtotal, 31);
-  assert.equal(pricing.deliveryFee, 3.25);
-  assert.equal(pricing.totalPrice, 34.25);
+  assert.equal(pricing.deliveryFee, 5.25);
+  assert.equal(pricing.totalPrice, 36.25);
   assert.equal(pricing.currency, 'CHF');
-  assert.equal(pricing.driverEarning, 3.25);
+  assert.equal(pricing.driverEarning, 5.25);
 });
 
 test('rejects order below restaurant minimum and unsupported currency', () => {
@@ -99,4 +99,13 @@ test('rejects non-finite totals even when subtotal and delivery fee are individu
   });
   assert.equal(pricing.ok, false);
   assert.equal(pricing.code, 'INVALID_ORDER_PRICING');
+});
+
+test('frais de livraison relevés au minimum livreur (4 CHF) quand AFROEAT livre', () => {
+  const pricing = calculateRestaurantPricing({
+    items: [{ price: 15.5, quantity: 2 }],
+    restaurant: { currency: 'CHF', deliveryFee: 3.25, minimumOrderAmount: 20 },
+  });
+  assert.equal(pricing.deliveryFee, 4);
+  assert.equal(pricing.totalPrice, 35);
 });

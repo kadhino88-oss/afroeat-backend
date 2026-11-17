@@ -17,6 +17,7 @@ const {
 
 const { sendPushToUser } = require('../utils/pushNotifications');
 const { parseTip, applyTipToSplit } = require('../utils/tips');
+const { ratesForRestaurant, courierMinimumFor } = require('../utils/partnerOffer');
 const { refundCancelledOrder } = require('../utils/orderRefund');
 const PromoCode = require('../models/PromoCode');
 const { resolvePromo, claimPromoUse } = require('./promoController');
@@ -752,7 +753,7 @@ const createOrder = async (req, res) => {
     }
 
     const restaurantExists = await Restaurant.findById(restaurant).select(
-      '_id owner latitude longitude location address city country currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery'
+      '_id owner latitude longitude location address city country currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery createdAt'
     );
 
     if (!restaurantExists) {
@@ -884,8 +885,9 @@ const createOrder = async (req, res) => {
     const baseSplit = calculateMarketplaceSplit({
       itemsSubtotal: pricing.subtotal,
       deliveryFee: pricing.deliveryFee,
-      rates: marketplaceRates,
+      rates: ratesForRestaurant(marketplaceRates, restaurantExists),
       selfDelivery,
+      courierMinimum: courierMinimumFor(pricing.currency),
     });
 
     // Code promo : remise financée par la plateforme, plafonnée sur sa marge.
@@ -1394,7 +1396,7 @@ const getOrderQuote = async (req, res) => {
     }
 
     const restaurantDoc = await Restaurant.findById(restaurant).select(
-      '_id currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery'
+      '_id currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery createdAt'
     );
 
     if (!restaurantDoc) {
@@ -1467,7 +1469,7 @@ const getOrderQuote = async (req, res) => {
       } catch {
         rates = null;
       }
-      const split = calculateMarketplaceSplit({ itemsSubtotal: pricing.subtotal, deliveryFee: pricing.deliveryFee, rates, selfDelivery: restaurantDoc.selfDelivery === true });
+      const split = calculateMarketplaceSplit({ itemsSubtotal: pricing.subtotal, deliveryFee: pricing.deliveryFee, rates: ratesForRestaurant(rates, restaurantDoc), selfDelivery: restaurantDoc.selfDelivery === true, courierMinimum: courierMinimumFor(pricing.currency) });
       const resolved = await resolvePromo({
         rawCode: req.body.promoCode,
         userId: req.user?._id,

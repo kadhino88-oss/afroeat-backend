@@ -30,7 +30,8 @@ router.get('/terms', (req, res) => {
     rates = {};
   }
   res.set('Cache-Control', 'public, max-age=300');
-  return res.json({ success: true, terms: partnerTermsFromRates(rates) });
+  const { offerSummary } = require('../utils/partnerOffer');
+  return res.json({ success: true, terms: { ...partnerTermsFromRates(rates), offer: offerSummary() } });
 });
 
 // Invitation : le partenaire crée lui-même son compte (jeton de 64 caractères, à usage unique).
