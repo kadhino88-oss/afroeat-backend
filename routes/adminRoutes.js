@@ -82,6 +82,11 @@ router.get('/promo-codes', promos.listPromos);
 router.post('/promo-codes', promos.createPromo);
 router.patch('/promo-codes/:id', promos.setPromoActive);
 
+// Surveillance des erreurs (API et site).
+const monitoring = require('../controllers/monitoringController');
+router.get('/errors', monitoring.listErrors);
+router.patch('/errors/:id/resolve', monitoring.resolveError);
+
 // Double authentification de l'administrateur connecté.
 const twoFactor = require('../controllers/twoFactorController');
 router.get('/2fa/status', twoFactor.status);

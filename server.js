@@ -239,6 +239,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// Surveillance : toute réponse 5xx est enregistrée (regroupée) et visible dans l'administration.
+app.use(require('./utils/errorTracker').captureServerErrors());
+
 app.use((req, res, next) => {
   if (isShuttingDown) {
     return res.status(503).json({
@@ -318,6 +321,9 @@ app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/delivery', require('./routes/deliveryRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 
+const clientErrorLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
+app.post('/api/monitoring/client-error', clientErrorLimiter, require('./controllers/monitoringController').reportClientError);
+
 // Mount payment method discovery and cash selection even when Stripe is
 // not configured. Card/checkout/refund endpoints return 503 in that case.
 // The raw-body webhook remains mounted above only when Stripe is configured.
@@ -341,6 +347,8 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  res.locals.errorDetail = err?.message;
+  res.locals.errorStack = err?.stack;
   console.error('EXPRESS ERROR =>', {
     requestId: req?.requestId,
     method: req?.method,
