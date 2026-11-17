@@ -159,7 +159,9 @@ const calculateRestaurantPricing = ({ items, restaurant }) => {
   const subtotal = roundMoney(
     items.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0)
   );
-  const deliveryFee = roundMoney(rawDeliveryFee);
+  // Quand AFROEAT livre, les frais ne descendent pas sous le minimum garanti au livreur.
+  const { floorDeliveryFee } = require('./partnerOffer');
+  const deliveryFee = roundMoney(floorDeliveryFee(rawDeliveryFee, currency, restaurant.selfDelivery === true));
   const minimumOrderAmount = roundMoney(rawMinimum);
 
   if (!Number.isFinite(subtotal) || subtotal < 0) {

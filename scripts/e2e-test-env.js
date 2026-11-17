@@ -164,7 +164,7 @@ const main = async () => {
     { menuItem: String(state.yassa._id), quantity: 1 },
     { menuItem: String(state.alloco._id), quantity: 2 },
   ];
-  const expectedTotal = Number(state.yassa.price) + 2 * Number(state.alloco.price) + 3;
+  const expectedTotal = Number(state.yassa.price) + 2 * Number(state.alloco.price) + 4; // frais du restaurant de test (3 CHF) relevés au minimum livreur de 4 CHF
 
   await step('devis serveur : sous-total + livraison', async () => {
     const response = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items } });
