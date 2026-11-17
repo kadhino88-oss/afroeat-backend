@@ -101,6 +101,9 @@ router.get(
  *
  * Payload tracking premium dédié au front live tracking.
  */
+const { listOrderMessages, postOrderMessage } = require('../controllers/orderChatController');
+router.get('/:id/messages', protect, canAccessOrder, listOrderMessages);
+router.post('/:id/messages', protect, canAccessOrder, postOrderMessage);
 router.get('/:id/tracking', protect, canAccessOrder, getOrderTracking);
 
 /**

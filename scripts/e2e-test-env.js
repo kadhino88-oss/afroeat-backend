@@ -273,6 +273,16 @@ const main = async () => {
     expectStatus(response, 200, 'prise en charge : ');
   });
 
+  await step('messagerie : le livreur écrit, le client et le restaurant lisent, un inconnu non', async () => {
+    const sent = await call('POST', `/orders/${state.orderId}/messages`, { token: state.courier.token, body: { text: `Je suis en route (e2e ${run})` } });
+    expectStatus(sent, 201, 'envoi : ');
+    const read = await call('GET', `/orders/${state.orderId}/messages`, { token: state.client.token });
+    expectStatus(read, 200, 'lecture client : ');
+    expect((read.json?.messages || []).some((m) => String(m.text).includes(run)), 'message absent côté client');
+    const resto = await call('GET', `/orders/${state.orderId}/messages`, { token: state.owner.token });
+    expectStatus(resto, 200, 'lecture restaurant : ');
+  });
+
   await step('livraison bloquée tant que le paiement n’est pas confirmé', async () => {
     const response = await call('PUT', `/orders/${state.orderId}/status`, { token: state.courier.token, body: { status: 'Livrée' } });
     expectStatus(response, 409);
