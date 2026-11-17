@@ -18,6 +18,7 @@ const {
 const { sendPushToUser } = require('../utils/pushNotifications');
 const { parseTip, applyTipToSplit } = require('../utils/tips');
 const { ratesForRestaurant, courierMinimumFor } = require('../utils/partnerOffer');
+const { parseScheduledFor } = require('../utils/scheduling');
 const { refundCancelledOrder } = require('../utils/orderRefund');
 const PromoCode = require('../models/PromoCode');
 const { resolvePromo, claimPromoUse } = require('./promoController');
@@ -781,7 +782,12 @@ const createOrder = async (req, res) => {
       });
     }
 
-    if (!isRestaurantOpenNow(restaurantExists)) {
+    // Commande programmée : le commerce peut être fermé maintenant, pas à l'heure prévue.
+    const schedule = parseScheduledFor(req.body?.scheduledFor, restaurantExists);
+    if (!schedule.ok) {
+      return res.status(400).json({ success: false, code: schedule.code, message: schedule.message });
+    }
+    if (!schedule.date && !isRestaurantOpenNow(restaurantExists)) {
       return res.status(409).json({
         success: false,
         code: 'RESTAURANT_CLOSED',
@@ -981,6 +987,7 @@ const createOrder = async (req, res) => {
       ageConfirmedAt: containsAlcohol ? new Date() : null,
       selfDelivery,
       fulfillment: pickup ? 'pickup' : 'delivery',
+      scheduledFor: schedule.date,
       driverEarning: marketplaceSplit.driverEarning,
       marketplaceSplitCalculated: true,
       commissionRateBps: marketplaceSplit.commissionRateBps,
@@ -1440,7 +1447,11 @@ const getOrderQuote = async (req, res) => {
       });
     }
 
-    if (!isRestaurantOpenNow(restaurantDoc)) {
+    const quoteSchedule = parseScheduledFor(req.body?.scheduledFor, restaurantDoc);
+    if (!quoteSchedule.ok) {
+      return res.status(400).json({ success: false, code: quoteSchedule.code, message: quoteSchedule.message });
+    }
+    if (!quoteSchedule.date && !isRestaurantOpenNow(restaurantDoc)) {
       return res.status(409).json({
         success: false,
         code: 'RESTAURANT_CLOSED',
@@ -1543,6 +1554,7 @@ const getOrderQuote = async (req, res) => {
         currency: pricing.currency,
         containsAlcohol: orderContainsAlcohol(menuItems),
         fulfillment: quotePickup ? 'pickup' : 'delivery',
+        scheduledFor: quoteSchedule.date,
         pickupAvailable: restaurantDoc.pickupEnabled !== false,
       },
     });

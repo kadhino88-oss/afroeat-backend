@@ -369,6 +369,8 @@ const orderSchema = new mongoose.Schema(
 
     // Mode de remise : livraison (par défaut) ou vente à emporter (le client vient chercher sa commande).
     fulfillment: { type: String, enum: ['delivery', 'pickup'], default: 'delivery' },
+    // Commande programmée : heure de livraison ou de retrait souhaitée (null = dès que possible).
+    scheduledFor: { type: Date, default: null },
     promoCode: { type: String, default: '', trim: true, maxlength: 24 },
     discountAmount: { type: Number, default: 0, min: 0, validate: { validator: Number.isFinite, message: 'Remise invalide' } },
     promoReleased: { type: Boolean, default: false },
