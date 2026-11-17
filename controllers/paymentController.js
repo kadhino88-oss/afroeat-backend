@@ -127,6 +127,8 @@ const markOrderAsPaid = async ({
   }
 
   await order.save();
+  // Nouvelle commande payée : alerte du restaurant et des livreurs proches (erreurs journalisées, jamais bloquantes).
+  await require('../utils/courierDispatch').announcePaidOrder(order).catch(() => {});
   return order;
 };
 

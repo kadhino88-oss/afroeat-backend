@@ -222,6 +222,20 @@ const main = async () => {
     expect(state.courier.id, 'identifiant du livreur introuvable');
   });
 
+  await step('livreur : liste des courses disponibles (dispatch)', async () => {
+    const response = await call('GET', '/delivery/available-orders', { token: state.courier.token });
+    expectStatus(response, 200);
+    expect(Array.isArray(response.json?.orders), 'liste des courses disponibles absente');
+    // La commande de test n'est pas payée : elle ne doit pas être proposée aux livreurs.
+    expect(!response.json.orders.some((o) => String(o._id) === String(state.orderId)), 'commande non payée proposée aux livreurs');
+    return `${response.json.orders.length} course(s) disponible(s)`;
+  });
+
+  await step('livreur : ne peut pas accepter une commande non payée', async () => {
+    const response = await call('POST', `/delivery/orders/${state.orderId}/accept`, { token: state.courier.token });
+    expect(response.status === 409, `attendu 409, reçu ${response.status}`);
+  });
+
   await step('restaurant : assigne le livreur', async () => {
     const response = await call('PUT', `/orders/${state.orderId}/assign-driver`, {
       token: state.owner.token,
