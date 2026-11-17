@@ -5,7 +5,7 @@
  * La fiche est créée MASQUÉE (isActive=false) : l'administrateur vérifie les prix avec le partenaire,
  * puis l'active depuis l'administration. Le compte propriétaire reçoit un mot de passe aléatoire jamais
  * affiché : le partenaire le remplace via « Mot de passe oublié » ou une invitation.
- * Les plats existants du même nom sont mis à jour, jamais dupliqués ; aucun plat n'est supprimé.
+ * Seuls les plats absents sont ajoutés : les plats existants (modifiés dans l'administration) ne sont jamais touchés.
  *
  * Usage : MONGO_URI=... PARTNER=osaveurs-annemasse node scripts/seed-partner.js
  */
@@ -91,7 +91,8 @@ const main = async () => {
     const result = await MenuItem.updateOne(
       { restaurant: restaurant._id, name: item.name },
       {
-        $set: {
+        // Seulement à la création : une modification faite dans l'administration n'est jamais écrasée.
+        $setOnInsert: {
           restaurant: restaurant._id,
           name: item.name,
           price: item.price,
@@ -106,11 +107,11 @@ const main = async () => {
       { upsert: true }
     );
     if (result.upsertedCount) created += 1;
-    else if (result.modifiedCount) updated += 1;
+    else updated += 1;
   }
 
   console.log(
-    `« ${restaurant.name} » (${restaurant._id}) : ${created} plat(s) créé(s), ${updated} mis à jour, ` +
+    `« ${restaurant.name} » (${restaurant._id}) : ${created} plat(s) ajouté(s), ${updated} déjà présent(s) (inchangés), ` +
       `fiche ${restaurant.isActive ? 'VISIBLE' : 'MASQUÉE (à activer dans l’administration)'}.`
   );
   await mongoose.disconnect();
