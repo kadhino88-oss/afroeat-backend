@@ -23,8 +23,9 @@ test('rien d’inutilisable : SVG, .ico, icônes minuscules, javascript:', () =>
 
 test('les lieux exposent imageUrl et logoUrl', () => {
   const src = require('fs').readFileSync(require('path').join(__dirname, '../utils/placeSearch.js'), 'utf8');
-  assert.match(src, /imageUrl: doc\.imageUrl \|\| ''/);
-  assert.match(src, /logoUrl: doc\.logoUrl \|\| ''/);
+  assert.match(src, /imageUrl: cleanImageUrl\(doc\.imageUrl\)/);
+  assert.match(src, /logoUrl: cleanImageUrl\(doc\.logoUrl\)/);
+  assert.match(src, /website: cleanWebsite\(doc\.website\)/);
 });
 
 test('un lieu repris par un partenaire visible n’est plus listé en double', async () => {
