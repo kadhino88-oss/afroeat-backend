@@ -64,19 +64,21 @@ const main = async () => {
 
   const existing = await Restaurant.findOne({ owner: owner._id, name: data.restaurant.name }).select('_id isActive');
   const { location, ...fields } = data.restaurant;
+  // Fiche créée une seule fois (masquée) ; ensuite, la fiche modifiée dans l'administration n'est plus touchée.
   const restaurant = await Restaurant.findOneAndUpdate(
     { owner: owner._id, name: data.restaurant.name },
     {
-      $set: {
+      $setOnInsert: {
         ...fields,
         owner: owner._id,
         ...(location ? { location: { ...location, updatedAt: new Date() } } : {}),
+        isActive: false,
+        isOpen: true,
       },
-      // Création : masquée ; mise à jour : on ne touche pas à l'activation choisie par l'admin.
-      ...(existing ? {} : { $setOnInsert: { isActive: false, isOpen: true } }),
     },
     { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
   );
+  if (existing) console.log('Fiche déjà existante : laissée telle quelle.');
 
   // Fiche d'annuaire du même commerce (clé OSM/curated) : liée au partenaire pour éviter le doublon.
   if (data.claimsPlace) {
