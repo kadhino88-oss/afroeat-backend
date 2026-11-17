@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
+    "dev": "node --watch server.js",
     "check:syntax": "node scripts/check-syntax.js",
     "test": "node --test",
     "db:sync-indexes": "node scripts/sync-indexes.js",
@@ -29,9 +29,6 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.12.1",
     "stripe": "^23.1.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.0"
   },
   "overrides": {
     "minimatch": "^11.0.1"

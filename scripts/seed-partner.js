@@ -17,8 +17,18 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const MenuItem = require('../models/MenuItem');
+const UploadedImage = require('../models/UploadedImage');
 
 const EXPECTED_DB = process.env.EXPECT_DB || 'afroeat_staging';
+const PUBLIC_API_URL = String(process.env.PUBLIC_API_URL || 'https://afroeat-api-staging.vercel.app').replace(/\/+$/, '');
+const MAX_MEDIA_BYTES = 900 * 1024;
+
+/** Chemin de la photo d'illustration d'un plat (data/partners/media/<clé>/<fichier>.jpg), ou null. */
+const mediaPath = (key, file) => {
+  if (!file) return null;
+  if (!/^[a-z0-9-]{1,80}\.jpg$/.test(String(file))) throw new Error(`Nom de photo invalide : ${file}`);
+  return path.join(__dirname, '..', 'data', 'partners', 'media', key, file);
+};
 
 const loadPartner = (key) => {
   if (!/^[a-z0-9-]{3,60}$/.test(String(key || ''))) throw new Error('Clé de partenaire invalide.');
@@ -31,6 +41,8 @@ const loadPartner = (key) => {
     if (!item.name || !Number.isFinite(item.price) || item.price < 0) {
       throw new Error(`Plat invalide : ${JSON.stringify(item)}`);
     }
+    const media = mediaPath(key, item.media);
+    if (media && !fs.existsSync(media)) throw new Error(`Photo introuvable : ${item.media}`);
   }
   return data;
 };
@@ -112,6 +124,26 @@ const main = async () => {
     else updated += 1;
   }
 
+  // Photos d'illustration : posées seulement sur les plats sans photo (une vraie photo n'est jamais remplacée).
+  let illustrated = 0;
+  for (const item of data.items) {
+    const media = mediaPath(process.env.PARTNER, item.media);
+    if (!media) continue;
+    const menuItem = await MenuItem.findOne({ restaurant: restaurant._id, name: item.name }).select('_id image');
+    if (!menuItem || menuItem.image) continue;
+    const bytes = fs.readFileSync(media);
+    if (bytes.length > MAX_MEDIA_BYTES || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+      throw new Error(`Photo non conforme (JPEG ≤ 900 Ko) : ${item.media}`);
+    }
+    const image = await UploadedImage.create({ owner: owner._id, contentType: 'image/jpeg', data: bytes, size: bytes.length });
+    await MenuItem.updateOne(
+      { _id: menuItem._id, image: { $in: ['', null] } },
+      { $set: { image: `${PUBLIC_API_URL}/api/images/${image._id}`, imageIsIllustration: true } }
+    );
+    illustrated += 1;
+  }
+  if (illustrated) console.log(`${illustrated} photo(s) d'illustration ajoutée(s).`);
+
   console.log(
     `« ${restaurant.name} » (${restaurant._id}) : ${created} plat(s) ajouté(s), ${updated} déjà présent(s) (inchangés), ` +
       `fiche ${restaurant.isActive ? 'VISIBLE' : 'MASQUÉE (à activer dans l’administration)'}.`
@@ -126,4 +158,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { loadPartner };
+module.exports = { loadPartner, mediaPath };

@@ -33,6 +33,8 @@ const toArray = (value) => (Array.isArray(value) ? value : []);
 
 const sanitizeMenuPayload = (body = {}) => {
   const payload = { ...body };
+  // Indicateur posé uniquement par l'import des photos d'illustration, jamais par le client.
+  delete payload.imageIsIllustration;
 
   if (payload.name !== undefined) payload.name = normalizeString(payload.name);
   if (payload.description !== undefined) {
@@ -681,6 +683,11 @@ router.put(
 
       if (req.user.role !== 'admin') {
         delete payload.restaurant;
+      }
+
+      // Une nouvelle photo envoyée par le commerce remplace la photo d'illustration.
+      if (payload.image !== undefined && payload.image !== (req.menuItem.image || '')) {
+        payload.imageIsIllustration = false;
       }
 
       const updatedItem = await MenuItem.findByIdAndUpdate(
