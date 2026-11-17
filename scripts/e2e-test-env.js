@@ -175,6 +175,17 @@ const main = async () => {
     return `${quote.totalPrice} CHF`;
   });
 
+  await step('devis avec pourboire : ajouté au total, 100 % livreur', async () => {
+    const response = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items, tipAmount: 2.5 } });
+    expectStatus(response, 200);
+    const quote = response.json?.quote;
+    expect(quote?.tipAmount === 2.5, `pourboire ${quote?.tipAmount}`);
+    expect(Math.abs(quote?.totalPrice - (expectedTotal + 2.5)) < 0.001, `total ${quote?.totalPrice}`);
+    const bad = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items, tipAmount: 500 } });
+    expect(bad.status === 400 && bad.json?.code === 'INVALID_TIP_AMOUNT', `pourboire excessif accepté (${bad.status})`);
+    return `${quote.totalPrice} CHF dont 2.50 de pourboire`;
+  });
+
   await step('commande refusée si le devis affiché est périmé (QUOTE_CHANGED)', async () => {
     const response = await createOrder({ items, total: 1 });
     expectStatus(response, 409);
