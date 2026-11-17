@@ -389,7 +389,7 @@ const sanitizeOrdersForResponse = (orders = [], viewerRole = '') => {
   return safeOrders.map((order) => sanitizeOrderForResponse(order, viewerRole)).filter(Boolean);
 };
 
-const canTransitionStatus = (currentStatus, nextStatus, role, { selfDelivery = false } = {}) => {
+const canTransitionStatus = (currentStatus, nextStatus, role, { selfDelivery = false, pickup = false } = {}) => {
   if (role === 'admin') return true;
 
   if (currentStatus === 'Livrée' || currentStatus === 'Annulée') {
@@ -403,6 +403,14 @@ const canTransitionStatus = (currentStatus, nextStatus, role, { selfDelivery = f
   if (role === 'restaurant') {
     if (currentStatus === 'En attente' && nextStatus === 'Confirmée') return true;
     if (currentStatus === 'Confirmée' && nextStatus === 'En préparation') return true;
+
+    // À emporter : le commerce remet la commande au client au comptoir.
+    if (pickup) {
+      return (
+        (['Confirmée', 'En préparation'].includes(currentStatus) && nextStatus === 'Livrée') ||
+        (['En attente', 'Confirmée', 'En préparation'].includes(currentStatus) && nextStatus === 'Annulée')
+      );
+    }
 
     // Livraison assurée par le restaurant : il part en livraison puis confirme la remise.
     if (selfDelivery) {
@@ -706,7 +714,8 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const safeDeliveryAddress = normalizeDeliveryAddress(deliveryAddress);
+    const pickup = req.body?.fulfillment === 'pickup';
+    let safeDeliveryAddress = pickup ? 'pickup' : normalizeDeliveryAddress(deliveryAddress);
     if (!safeDeliveryAddress) {
       return res.status(400).json({
         success: false,
@@ -753,7 +762,7 @@ const createOrder = async (req, res) => {
     }
 
     const restaurantExists = await Restaurant.findById(restaurant).select(
-      '_id owner latitude longitude location address city country currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery createdAt'
+      '_id owner latitude longitude location address city country currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery pickupEnabled createdAt'
     );
 
     if (!restaurantExists) {
@@ -839,9 +848,23 @@ const createOrder = async (req, res) => {
       });
     }
 
+    if (pickup && restaurantExists.pickupEnabled === false) {
+      return res.status(409).json({
+        success: false,
+        code: 'PICKUP_UNAVAILABLE',
+        message: 'Ce commerce ne propose pas la vente à emporter.',
+      });
+    }
+    if (pickup) {
+      safeDeliveryAddress = `À emporter — ${normalizeString(restaurantExists.address) || normalizeString(restaurantExists.city) || 'au comptoir du commerce'}`;
+    }
+
+    // À emporter : pas de frais de livraison ni de minimum de commande.
     const pricing = calculateRestaurantPricing({
       items: trustedItemsResult.items,
-      restaurant: restaurantExists,
+      restaurant: pickup
+        ? { currency: restaurantExists.currency, deliveryFee: 0, minimumOrderAmount: 0, selfDelivery: true }
+        : restaurantExists,
     });
 
     if (!pricing.ok) {
@@ -877,7 +900,8 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const selfDelivery = restaurantExists.selfDelivery === true;
+    // À emporter : le commerce remet lui-même la commande (aucun livreur), commission réduite.
+    const selfDelivery = restaurantExists.selfDelivery === true || pickup;
     const tip = parseTip(req.body?.tipAmount);
     if (!tip.ok) {
       return res.status(400).json({ success: false, code: tip.code, message: tip.message });
@@ -885,7 +909,7 @@ const createOrder = async (req, res) => {
     const baseSplit = calculateMarketplaceSplit({
       itemsSubtotal: pricing.subtotal,
       deliveryFee: pricing.deliveryFee,
-      rates: ratesForRestaurant(marketplaceRates, restaurantExists),
+      rates: ratesForRestaurant(marketplaceRates, { createdAt: restaurantExists.createdAt, selfDelivery }),
       selfDelivery,
       courierMinimum: courierMinimumFor(pricing.currency),
     });
@@ -956,6 +980,7 @@ const createOrder = async (req, res) => {
       containsAlcohol,
       ageConfirmedAt: containsAlcohol ? new Date() : null,
       selfDelivery,
+      fulfillment: pickup ? 'pickup' : 'delivery',
       driverEarning: marketplaceSplit.driverEarning,
       marketplaceSplitCalculated: true,
       commissionRateBps: marketplaceSplit.commissionRateBps,
@@ -1036,7 +1061,7 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    if (!canTransitionStatus(req.order.status, nextStatus, req.user.role, { selfDelivery: req.order.selfDelivery === true })) {
+    if (!canTransitionStatus(req.order.status, nextStatus, req.user.role, { selfDelivery: req.order.selfDelivery === true, pickup: req.order.fulfillment === 'pickup' })) {
       return res.status(403).json({
         success: false,
         message: 'Transition de statut non autorisée.',
@@ -1396,7 +1421,7 @@ const getOrderQuote = async (req, res) => {
     }
 
     const restaurantDoc = await Restaurant.findById(restaurant).select(
-      '_id currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery createdAt'
+      '_id currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery pickupEnabled createdAt'
     );
 
     if (!restaurantDoc) {
@@ -1445,7 +1470,16 @@ const getOrderQuote = async (req, res) => {
       });
     }
 
-    const pricing = calculateRestaurantPricing({ items: trusted.items, restaurant: restaurantDoc });
+    const quotePickup = req.body?.fulfillment === 'pickup';
+    if (quotePickup && restaurantDoc.pickupEnabled === false) {
+      return res.status(409).json({ success: false, code: 'PICKUP_UNAVAILABLE', message: 'Ce commerce ne propose pas la vente à emporter.' });
+    }
+    const pricing = calculateRestaurantPricing({
+      items: trusted.items,
+      restaurant: quotePickup
+        ? { currency: restaurantDoc.currency, deliveryFee: 0, minimumOrderAmount: 0, selfDelivery: true }
+        : restaurantDoc,
+    });
 
     if (!pricing.ok) {
       return res.status(pricing.code === 'MINIMUM_ORDER_NOT_MET' ? 409 : 400).json({
@@ -1469,7 +1503,7 @@ const getOrderQuote = async (req, res) => {
       } catch {
         rates = null;
       }
-      const split = calculateMarketplaceSplit({ itemsSubtotal: pricing.subtotal, deliveryFee: pricing.deliveryFee, rates: ratesForRestaurant(rates, restaurantDoc), selfDelivery: restaurantDoc.selfDelivery === true, courierMinimum: courierMinimumFor(pricing.currency) });
+      const split = calculateMarketplaceSplit({ itemsSubtotal: pricing.subtotal, deliveryFee: pricing.deliveryFee, rates: ratesForRestaurant(rates, { createdAt: restaurantDoc.createdAt, selfDelivery: restaurantDoc.selfDelivery === true || quotePickup }), selfDelivery: restaurantDoc.selfDelivery === true || quotePickup, courierMinimum: courierMinimumFor(pricing.currency) });
       const resolved = await resolvePromo({
         rawCode: req.body.promoCode,
         userId: req.user?._id,
@@ -1508,6 +1542,8 @@ const getOrderQuote = async (req, res) => {
         totalPrice: roundMoney(pricing.totalPrice - (promoQuote.discount || 0) + quoteTip.amount),
         currency: pricing.currency,
         containsAlcohol: orderContainsAlcohol(menuItems),
+        fulfillment: quotePickup ? 'pickup' : 'delivery',
+        pickupAvailable: restaurantDoc.pickupEnabled !== false,
       },
     });
   } catch (error) {

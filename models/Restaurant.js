@@ -351,6 +351,12 @@ const restaurantSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Vente à emporter proposée aux clients (retrait au comptoir, sans frais de livraison).
+    pickupEnabled: {
+      type: Boolean,
+      default: true,
+    },
+
     autoAcceptOrders: {
       type: Boolean,
       default: false,

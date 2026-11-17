@@ -186,6 +186,15 @@ const main = async () => {
     return `${quote.totalPrice} CHF dont 2.50 de pourboire`;
   });
 
+  await step('à emporter : devis sans frais de livraison', async () => {
+    const response = await call('POST', '/orders/quote', { token: state.client.token, body: { restaurant: state.restaurantId, items, fulfillment: 'pickup' } });
+    expectStatus(response, 200);
+    const quote = response.json?.quote;
+    expect(quote?.deliveryFee === 0, `frais ${quote?.deliveryFee}`);
+    expect(quote?.fulfillment === 'pickup', 'mode à emporter non renvoyé');
+    return `${quote.totalPrice} CHF à emporter`;
+  });
+
   await step('commande refusée si le devis affiché est périmé (QUOTE_CHANGED)', async () => {
     const response = await createOrder({ items, total: 1 });
     expectStatus(response, 409);
