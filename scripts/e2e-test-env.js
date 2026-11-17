@@ -284,6 +284,22 @@ const main = async () => {
     return 'adresse checkout.stripe.com reçue';
   });
 
+  // ─── Surveillance des erreurs ───
+  state.admin = state.admin || (await login('admin-test@afroeat.test', 'admin'));
+  await step('surveillance : une erreur du site est enregistrée et visible par l’admin', async () => {
+    const marker = `e2e-client-error-${run}`;
+    const report = await call('POST', '/monitoring/client-error', { body: { message: marker, path: '/e2e' } });
+    expectStatus(report, 202);
+    const list = await call('GET', '/admin/errors', { token: state.admin.token });
+    expectStatus(list, 200);
+    const found = (list.json?.errors || []).find((e) => e.message === marker);
+    expect(found && found.source === 'web', 'erreur du site absente de la liste admin');
+    const resolved = await call('PATCH', `/admin/errors/${found._id}/resolve`, { token: state.admin.token });
+    expectStatus(resolved, 200);
+    const denied = await call('GET', '/admin/errors', { token: state.client.token });
+    expect(denied.status === 403 || denied.status === 401, `client non bloqué (${denied.status})`);
+  });
+
   // ─── Codes promo (remise financée par la plateforme) ───
   const promoCode = `E2E${run}`.toUpperCase().slice(0, 20);
   const subtotalOf = () => Number(state.yassa.price) + 2 * Number(state.alloco.price);
