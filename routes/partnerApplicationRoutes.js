@@ -19,6 +19,20 @@ const applicationLimiter = rateLimit({
 
 router.post('/', applicationLimiter, createApplication);
 
+// Conditions commerciales publiques (commission par devise), lues depuis MARKETPLACE_RATES_JSON.
+router.get('/terms', (req, res) => {
+  const { loadMarketplaceRates } = require('../config/marketplaceRates');
+  const { partnerTermsFromRates } = require('../utils/partnerTerms');
+  let rates = {};
+  try {
+    rates = loadMarketplaceRates();
+  } catch {
+    rates = {};
+  }
+  res.set('Cache-Control', 'public, max-age=300');
+  return res.json({ success: true, terms: partnerTermsFromRates(rates) });
+});
+
 // Invitation : le partenaire crée lui-même son compte (jeton de 64 caractères, à usage unique).
 const inviteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
