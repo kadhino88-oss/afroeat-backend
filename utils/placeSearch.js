@@ -64,7 +64,16 @@ const findStoredPlaces = async ({ kind, lat, lng, radiusKm, limit, africanOnly =
       location: { $geoWithin: { $centerSphere: [[lng, lat], radiusKm / 6378.1] } },
     }),
   ]);
-  return { items: docs.map(toApi), total };
+  // Doublons : un lieu repris par un partenaire dont la fiche est visible n'est plus listé deux fois.
+  const claimedIds = docs.map((d) => d.claimedRestaurant).filter(Boolean);
+  let hidden = new Set();
+  if (claimedIds.length) {
+    const Restaurant = require('../models/Restaurant');
+    const active = await Restaurant.find({ _id: { $in: claimedIds }, isActive: true }).select('_id').lean();
+    hidden = new Set(active.map((r) => String(r._id)));
+  }
+  const visible = docs.filter((d) => !d.claimedRestaurant || !hidden.has(String(d.claimedRestaurant)));
+  return { items: visible.map(toApi), total: Math.max(0, total - (docs.length - visible.length)) };
 };
 
 module.exports = { findStoredPlaces, toApi, clampLimit, DEFAULT_LIMIT, MAX_LIMIT };

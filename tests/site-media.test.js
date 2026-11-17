@@ -26,3 +26,24 @@ test('les lieux exposent imageUrl et logoUrl', () => {
   assert.match(src, /imageUrl: doc\.imageUrl \|\| ''/);
   assert.match(src, /logoUrl: doc\.logoUrl \|\| ''/);
 });
+
+test('un lieu repris par un partenaire visible n’est plus listé en double', async () => {
+  const Place = require('../models/Place');
+  const Restaurant = require('../models/Restaurant');
+  const origAgg = Place.aggregate, origCount = Place.countDocuments, origFind = Restaurant.find;
+  const claimed = '6afc7762a255f5f626a5f4f6';
+  Place.aggregate = async () => [
+    { osmKey: 'curated/x', kind: 'restaurant', name: 'Doublon', location: { coordinates: [6.2, 46.2] }, distanceMeters: 10, claimedRestaurant: claimed },
+    { osmKey: 'n1', kind: 'restaurant', name: 'Autre', location: { coordinates: [6.2, 46.2] }, distanceMeters: 20 },
+  ];
+  Place.countDocuments = async () => 2;
+  Restaurant.find = () => ({ select: () => ({ lean: async () => [{ _id: claimed }] }) });
+  try {
+    const { findStoredPlaces } = require('../utils/placeSearch');
+    const out = await findStoredPlaces({ kind: 'restaurants', lat: 46.2, lng: 6.2, radiusKm: 5 });
+    assert.deepEqual(out.items.map((i) => i.name), ['Autre']);
+    assert.equal(out.total, 1);
+  } finally {
+    Place.aggregate = origAgg; Place.countDocuments = origCount; Restaurant.find = origFind;
+  }
+});

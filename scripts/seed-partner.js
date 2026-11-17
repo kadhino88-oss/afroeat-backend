@@ -78,6 +78,13 @@ const main = async () => {
     { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
   );
 
+  // Fiche d'annuaire du même commerce (clé OSM/curated) : liée au partenaire pour éviter le doublon.
+  if (data.claimsPlace) {
+    const Place = require('../models/Place');
+    const claimed = await Place.updateOne({ osmKey: data.claimsPlace }, { $set: { claimedRestaurant: restaurant._id } });
+    console.log(claimed.matchedCount ? `Fiche d'annuaire « ${data.claimsPlace} » reliée au partenaire.` : `Fiche d'annuaire « ${data.claimsPlace} » introuvable.`);
+  }
+
   let created = 0;
   let updated = 0;
   for (const item of data.items) {
