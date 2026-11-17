@@ -17,6 +17,8 @@ const placeSchema = new mongoose.Schema(
     imageUrl: { type: String, default: '' },
     logoUrl: { type: String, default: '' },
     mediaCheckedAt: { type: Date, default: null },
+    // Fiche reprise par un commerce partenaire : masquée de l'annuaire dès que sa fiche AFROEAT est visible.
+    claimedRestaurant: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', default: null, index: true },
     isAfrican: { type: Boolean, default: false, index: true },
     location: {
       type: { type: String, enum: ['Point'], default: 'Point' },
