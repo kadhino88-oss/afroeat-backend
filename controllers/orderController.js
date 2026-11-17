@@ -386,7 +386,7 @@ const sanitizeOrdersForResponse = (orders = [], viewerRole = '') => {
   return safeOrders.map((order) => sanitizeOrderForResponse(order, viewerRole)).filter(Boolean);
 };
 
-const canTransitionStatus = (currentStatus, nextStatus, role) => {
+const canTransitionStatus = (currentStatus, nextStatus, role, { selfDelivery = false } = {}) => {
   if (role === 'admin') return true;
 
   if (currentStatus === 'Livrée' || currentStatus === 'Annulée') {
@@ -401,6 +401,12 @@ const canTransitionStatus = (currentStatus, nextStatus, role) => {
     if (currentStatus === 'En attente' && nextStatus === 'Confirmée') return true;
     if (currentStatus === 'Confirmée' && nextStatus === 'En préparation') return true;
 
+    // Livraison assurée par le restaurant : il part en livraison puis confirme la remise.
+    if (selfDelivery) {
+      if (['Confirmée', 'En préparation'].includes(currentStatus) && nextStatus === 'En livraison') return true;
+      if (currentStatus === 'En livraison' && nextStatus === 'Livrée') return true;
+    }
+
     if (
       ['En attente', 'Confirmée', 'En préparation'].includes(currentStatus) &&
       nextStatus === 'Annulée'
@@ -412,6 +418,7 @@ const canTransitionStatus = (currentStatus, nextStatus, role) => {
   }
 
   if (role === 'livreur') {
+    if (selfDelivery) return false;
     if (
       (currentStatus === 'Confirmée' || currentStatus === 'En préparation') &&
       nextStatus === 'En livraison'
@@ -743,7 +750,7 @@ const createOrder = async (req, res) => {
     }
 
     const restaurantExists = await Restaurant.findById(restaurant).select(
-      '_id owner latitude longitude location address city country currency deliveryFee minimumOrderAmount isActive isOpen openingHours'
+      '_id owner latitude longitude location address city country currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery'
     );
 
     if (!restaurantExists) {
@@ -867,10 +874,12 @@ const createOrder = async (req, res) => {
       });
     }
 
+    const selfDelivery = restaurantExists.selfDelivery === true;
     const marketplaceSplit = calculateMarketplaceSplit({
       itemsSubtotal: pricing.subtotal,
       deliveryFee: pricing.deliveryFee,
       rates: marketplaceRates,
+      selfDelivery,
     });
 
     // Code promo : remise financée par la plateforme, plafonnée sur sa marge.
@@ -935,6 +944,7 @@ const createOrder = async (req, res) => {
       discountAmount,
       containsAlcohol,
       ageConfirmedAt: containsAlcohol ? new Date() : null,
+      selfDelivery,
       driverEarning: marketplaceSplit.driverEarning,
       marketplaceSplitCalculated: true,
       commissionRateBps: marketplaceSplit.commissionRateBps,
@@ -1015,7 +1025,7 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    if (!canTransitionStatus(req.order.status, nextStatus, req.user.role)) {
+    if (!canTransitionStatus(req.order.status, nextStatus, req.user.role, { selfDelivery: req.order.selfDelivery === true })) {
       return res.status(403).json({
         success: false,
         message: 'Transition de statut non autorisée.',
@@ -1146,6 +1156,14 @@ const assignDriverToOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Impossible d’assigner un livreur à cette commande.',
+      });
+    }
+
+    if (req.order.selfDelivery === true) {
+      return res.status(409).json({
+        success: false,
+        code: 'SELF_DELIVERY_ORDER',
+        message: 'Ce commerce livre lui-même ses commandes : aucun livreur à assigner.',
       });
     }
 
@@ -1367,7 +1385,7 @@ const getOrderQuote = async (req, res) => {
     }
 
     const restaurantDoc = await Restaurant.findById(restaurant).select(
-      '_id currency deliveryFee minimumOrderAmount isActive isOpen openingHours'
+      '_id currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery'
     );
 
     if (!restaurantDoc) {
@@ -1440,7 +1458,7 @@ const getOrderQuote = async (req, res) => {
       } catch {
         rates = null;
       }
-      const split = calculateMarketplaceSplit({ itemsSubtotal: pricing.subtotal, deliveryFee: pricing.deliveryFee, rates });
+      const split = calculateMarketplaceSplit({ itemsSubtotal: pricing.subtotal, deliveryFee: pricing.deliveryFee, rates, selfDelivery: restaurantDoc.selfDelivery === true });
       const resolved = await resolvePromo({
         rawCode: req.body.promoCode,
         userId: req.user?._id,

@@ -14,7 +14,7 @@ const validateRate = (value, name) => {
  * validated basis-point rates. This only records the ledger split; it does not
  * initiate Stripe transfers.
  */
-const calculateMarketplaceSplit = ({ itemsSubtotal, deliveryFee, rates = null } = {}) => {
+const calculateMarketplaceSplit = ({ itemsSubtotal, deliveryFee, rates = null, selfDelivery = false } = {}) => {
   const subtotal = Number(itemsSubtotal);
   const fee = Number(deliveryFee);
 
@@ -31,9 +31,10 @@ const calculateMarketplaceSplit = ({ itemsSubtotal, deliveryFee, rates = null } 
   validateRate(courierPayoutRateBps, 'courierPayoutBps');
 
   const platformCommissionAmount = roundMoney(subtotal * commissionRateBps / 10000);
-  const restaurantEarning = roundMoney(subtotal - platformCommissionAmount);
-  const driverEarning = roundMoney(fee * courierPayoutRateBps / 10000);
-  const platformDeliveryEarning = roundMoney(fee - driverEarning);
+  // Livraison assurée par le restaurant : il garde l'intégralité des frais de livraison.
+  const restaurantEarning = roundMoney(subtotal - platformCommissionAmount + (selfDelivery ? fee : 0));
+  const driverEarning = selfDelivery ? 0 : roundMoney(fee * courierPayoutRateBps / 10000);
+  const platformDeliveryEarning = selfDelivery ? 0 : roundMoney(fee - driverEarning);
 
   return {
     commissionRateBps,

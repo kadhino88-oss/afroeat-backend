@@ -352,6 +352,7 @@ const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
 
   if (reqBody.isOpen    !== undefined) payload.isOpen    = normalizeBoolean(reqBody.isOpen,    false);
   if (reqBody.autoAcceptOrders !== undefined) payload.autoAcceptOrders = normalizeBoolean(reqBody.autoAcceptOrders, false);
+  if (reqBody.selfDelivery !== undefined) payload.selfDelivery = normalizeBoolean(reqBody.selfDelivery, false);
   if (reqBody.notificationsEnabled !== undefined) payload.notificationsEnabled = normalizeBoolean(reqBody.notificationsEnabled, true);
   if (reqBody.preparationMode !== undefined) payload.preparationMode = normalizeBoolean(reqBody.preparationMode, true);
   if (reqBody.isActive  !== undefined) payload.isActive   = normalizeBoolean(reqBody.isActive,  true);
@@ -392,6 +393,7 @@ const buildUpdatePayload = async (reqBody = {}) => {
   }
   if (reqBody.isOpen      !== undefined) payload.isOpen      = normalizeBoolean(reqBody.isOpen, false);
   if (reqBody.autoAcceptOrders !== undefined) payload.autoAcceptOrders = normalizeBoolean(reqBody.autoAcceptOrders, false);
+  if (reqBody.selfDelivery !== undefined) payload.selfDelivery = normalizeBoolean(reqBody.selfDelivery, false);
   if (reqBody.notificationsEnabled !== undefined) payload.notificationsEnabled = normalizeBoolean(reqBody.notificationsEnabled, true);
   if (reqBody.preparationMode !== undefined) payload.preparationMode = normalizeBoolean(reqBody.preparationMode, true);
   if (reqBody.isActive    !== undefined) payload.isActive    = normalizeBoolean(reqBody.isActive, true);

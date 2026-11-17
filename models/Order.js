@@ -365,6 +365,11 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Livraison assurée par le restaurant : il fait lui-même passer la commande en livraison puis livrée.
+    selfDelivery: {
+      type: Boolean,
+      default: false,
+    },
     ageConfirmedAt: {
       type: Date,
       default: null,
