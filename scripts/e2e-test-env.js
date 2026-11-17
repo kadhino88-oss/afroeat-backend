@@ -284,6 +284,12 @@ const main = async () => {
     return 'adresse checkout.stripe.com reçue';
   });
 
+  await step('conditions partenaires publiques : commission annoncée', async () => {
+    const response = await call('GET', '/partner-applications/terms');
+    expectStatus(response, 200);
+    expect(response.json?.terms && typeof response.json.terms.commissionByCurrency === 'object', 'conditions absentes');
+  });
+
   // ─── Surveillance des erreurs ───
   state.admin = state.admin || (await login('admin-test@afroeat.test', 'admin'));
   await step('surveillance : une erreur du site est enregistrée et visible par l’admin', async () => {
