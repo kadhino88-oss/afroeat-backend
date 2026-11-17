@@ -337,6 +337,12 @@ const restaurantSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Le commerce livre lui-même ses commandes (pas de livreur AFROEAT).
+    selfDelivery: {
+      type: Boolean,
+      default: false,
+    },
+
     autoAcceptOrders: {
       type: Boolean,
       default: false,

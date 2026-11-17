@@ -290,6 +290,36 @@ const main = async () => {
     expect(response.json?.terms && typeof response.json.terms.commissionByCurrency === 'object', 'conditions absentes');
   });
 
+  // ─── Livraison assurée par le restaurant ───
+  if (state.owner && state.client && state.restaurantId) {
+    await step('restaurant : active « je livre moi-même »', async () => {
+      const response = await call('PUT', `/restaurants/${state.restaurantId}`, { token: state.owner.token, body: { selfDelivery: true } });
+      expectStatus(response, 200);
+    });
+    await step('livraison par le restaurant : commande en espèces, du restaurant jusqu’à la remise', async () => {
+      let response = await createOrder({ items, total: expectedTotal });
+      expect(response.status === 201 || response.status === 200, `commande : ${response.status} (${response.json?.code || response.json?.message})`);
+      const orderId = orderIdOf(response.json);
+      expect(response.json?.order?.selfDelivery === true, 'commande non marquée « livrée par le restaurant »');
+      response = await call('POST', '/payments/cash', { token: state.client.token, body: { orderId } });
+      expectStatus(response, 200, 'espèces : ');
+      if (state.courier) {
+        const assign = await call('PUT', `/orders/${orderId}/assign-driver`, { token: state.owner.token, body: { deliveryPerson: state.courier.id } });
+        expect(assign.status === 409 && assign.json?.code === 'SELF_DELIVERY_ORDER', `assignation : ${assign.status} ${assign.json?.code}`);
+      }
+      for (const status of ['Confirmée', 'En préparation', 'En livraison', 'Livrée']) {
+        response = await call('PUT', `/orders/${orderId}/status`, { token: state.owner.token, body: { status } });
+        expectStatus(response, 200, `${status} : `);
+      }
+      const order = response.json?.order || {};
+      expect(order.status === 'Livrée' && order.paymentStatus === 'Payé', `${order.status} / ${order.paymentStatus}`);
+    });
+    await step('restaurant : revient à la livraison AFROEAT', async () => {
+      const response = await call('PUT', `/restaurants/${state.restaurantId}`, { token: state.owner.token, body: { selfDelivery: false } });
+      expectStatus(response, 200);
+    });
+  }
+
   // ─── Surveillance des erreurs ───
   state.admin = state.admin || (await login('admin-test@afroeat.test', 'admin'));
   await step('surveillance : une erreur du site est enregistrée et visible par l’admin', async () => {
