@@ -32,7 +32,8 @@
       "price": 7,
       "description": "Beignets farcis à la viande ou au poisson. Accompagnés de salade.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "pastels.jpg"
     },
     {
       "category": "Entrées",
@@ -40,7 +41,8 @@
       "price": 7,
       "description": "Accompagnés de salade.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "samoussas.jpg"
     },
     {
       "category": "Entrées",
@@ -48,7 +50,8 @@
       "price": 7,
       "description": "Accompagnés de salade.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "gesiers.jpg"
     },
     {
       "category": "Entrées",
@@ -56,7 +59,8 @@
       "price": 10,
       "description": "Accompagnées de salade.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "ailes.jpg"
     },
     {
       "category": "Plats de résistance",
@@ -64,7 +68,8 @@
       "price": 20,
       "description": "Riz au poisson façon tiéboudienne rouge.",
       "containsAlcohol": false,
-      "isPopular": true
+      "isPopular": true,
+      "media": "tchep-poisson.jpg"
     },
     {
       "category": "Plats de résistance",
@@ -72,7 +77,8 @@
       "price": 18,
       "description": "Riz à la viande façon tiéboudienne rouge.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "tchep-viande.jpg"
     },
     {
       "category": "Plats de résistance",
@@ -80,7 +86,8 @@
       "price": 17,
       "description": "Poulet mariné, sauce aux oignons.",
       "containsAlcohol": false,
-      "isPopular": true
+      "isPopular": true,
+      "media": "yassa-poulet.jpg"
     },
     {
       "category": "Plats de résistance",
@@ -88,7 +95,8 @@
       "price": 17,
       "description": "Poisson mariné, sauce aux oignons.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "yassa-poisson.jpg"
     },
     {
       "category": "Plats de résistance",
@@ -96,7 +104,8 @@
       "price": 17,
       "description": "Poulet, sauce à la pâte d’arachide.",
       "containsAlcohol": false,
-      "isPopular": true
+      "isPopular": true,
+      "media": "mafe-poulet.jpg"
     },
     {
       "category": "Plats de résistance",
@@ -104,7 +113,8 @@
       "price": 18,
       "description": "Poisson, sauce à la pâte d’arachide.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "mafe-poisson.jpg"
     },
     {
       "category": "Plats de résistance",
@@ -112,7 +122,8 @@
       "price": 12,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "spaghetti-rognons.jpg"
     },
     {
       "category": "Sauces et soupes",
@@ -120,7 +131,8 @@
       "price": 15,
       "description": "Au choix : gombo, graine (jus de palme), mafé (arachide) ou feuille de patate.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "sauce-simple.jpg"
     },
     {
       "category": "Sauces et soupes",
@@ -128,7 +140,8 @@
       "price": 18,
       "description": "Au choix : gombo, graine, mafé ou feuille de patate, servie avec du foutou.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "sauce-foutou.jpg"
     },
     {
       "category": "Sauces et soupes",
@@ -136,7 +149,8 @@
       "price": 17,
       "description": "Au choix : gombo, graine, mafé ou feuille de patate, servie avec du riz.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "sauce-riz.jpg"
     },
     {
       "category": "Sauces et soupes",
@@ -144,7 +158,8 @@
       "price": 17,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "soupe-tripes.jpg"
     },
     {
       "category": "Sauces et soupes",
@@ -152,7 +167,8 @@
       "price": 17,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "soupe-pintade.jpg"
     },
     {
       "category": "Sauces et soupes",
@@ -160,7 +176,8 @@
       "price": 20,
       "description": "Soupe de poisson machoiron.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "soupe-machoiron.jpg"
     },
     {
       "category": "Sauces et soupes",
@@ -168,7 +185,8 @@
       "price": 25,
       "description": "Uniquement le dimanche.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "soupe-pecheur.jpg"
     },
     {
       "category": "Grillades et fritures",
@@ -176,7 +194,8 @@
       "price": 17,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": true
+      "isPopular": true,
+      "media": "poulet-braise.jpg"
     },
     {
       "category": "Grillades et fritures",
@@ -184,7 +203,8 @@
       "price": 20,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "tilapia-braise.jpg"
     },
     {
       "category": "Grillades et fritures",
@@ -192,7 +212,8 @@
       "price": 15,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "tilapia-grille.jpg"
     },
     {
       "category": "Grillades et fritures",
@@ -200,7 +221,8 @@
       "price": 25,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "capitaine-braise.jpg"
     },
     {
       "category": "Grillades et fritures",
@@ -208,7 +230,8 @@
       "price": 17,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "capitaine-grille.jpg"
     },
     {
       "category": "Grillades et fritures",
@@ -216,7 +239,8 @@
       "price": 25,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "pintade-braisee.jpg"
     },
     {
       "category": "Grillades et fritures",
@@ -224,7 +248,8 @@
       "price": 16,
       "description": "Attiéké et thon frit, piment et oignons.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "garba.jpg"
     },
     {
       "category": "Grillades et fritures",
@@ -232,7 +257,8 @@
       "price": 23,
       "description": "Viande grillée à l’oignon et aux épices.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "choukouya.jpg"
     },
     {
       "category": "Accompagnements",
@@ -240,7 +266,8 @@
       "price": 5,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "attieke.jpg"
     },
     {
       "category": "Accompagnements",
@@ -248,7 +275,8 @@
       "price": 5,
       "description": "Bananes plantain frites.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "alloco.jpg"
     },
     {
       "category": "Accompagnements",
@@ -256,7 +284,8 @@
       "price": 5,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "riz.jpg"
     },
     {
       "category": "Accompagnements",
@@ -264,7 +293,8 @@
       "price": 5,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "chikwangue.jpg"
     },
     {
       "category": "Accompagnements",
@@ -272,7 +302,8 @@
       "price": 5,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "igname.jpg"
     },
     {
       "category": "Accompagnements",
@@ -280,7 +311,8 @@
       "price": 7,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "foutou.jpg"
     },
     {
       "category": "Accompagnements",
@@ -288,7 +320,8 @@
       "price": 10,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "riz-tchep.jpg"
     },
     {
       "category": "Accompagnements",
@@ -296,7 +329,8 @@
       "price": 0.7,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "sauce-oignon-piment.jpg"
     },
     {
       "category": "Accompagnements",
@@ -304,7 +338,8 @@
       "price": 7,
       "description": "Uniquement le dimanche.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "foufou.jpg"
     },
     {
       "category": "Menu enfant",
@@ -312,7 +347,8 @@
       "price": 10,
       "description": "Wings et alloco, ou wings et frites, avec un jus ou une compote.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "menu-enfant.jpg"
     },
     {
       "category": "Desserts",
@@ -320,7 +356,8 @@
       "price": 5,
       "description": "Dessert au lait caillé et mil.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "degue.jpg"
     },
     {
       "category": "Desserts",
@@ -328,7 +365,8 @@
       "price": 5,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "tarte-citron.jpg"
     },
     {
       "category": "Boissons",
@@ -336,7 +374,8 @@
       "price": 3,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "sodas.jpg"
     },
     {
       "category": "Boissons",
@@ -344,7 +383,8 @@
       "price": 5,
       "description": "Fait maison.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "jus-gingembre.jpg"
     },
     {
       "category": "Boissons",
@@ -352,7 +392,8 @@
       "price": 5,
       "description": "Fait maison.",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "jus-bissap.jpg"
     },
     {
       "category": "Boissons",
@@ -360,7 +401,8 @@
       "price": 5,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "energy.jpg"
     },
     {
       "category": "Boissons",
@@ -368,7 +410,8 @@
       "price": 8,
       "description": "",
       "containsAlcohol": false,
-      "isPopular": false
+      "isPopular": false,
+      "media": "top.jpg"
     },
     {
       "category": "Boissons",
@@ -376,7 +419,8 @@
       "price": 10,
       "description": "",
       "containsAlcohol": true,
-      "isPopular": false
+      "isPopular": false,
+      "media": "stout.jpg"
     },
     {
       "category": "Boissons",
@@ -384,7 +428,8 @@
       "price": 10,
       "description": "",
       "containsAlcohol": true,
-      "isPopular": false
+      "isPopular": false,
+      "media": "lager.jpg"
     },
     {
       "category": "Boissons",
@@ -392,7 +437,8 @@
       "price": 10,
       "description": "",
       "containsAlcohol": true,
-      "isPopular": false
+      "isPopular": false,
+      "media": "tequila-beer.jpg"
     },
     {
       "category": "Boissons",
@@ -400,7 +446,8 @@
       "price": 10,
       "description": "",
       "containsAlcohol": true,
-      "isPopular": false
+      "isPopular": false,
+      "media": "whisky-verre.jpg"
     },
     {
       "category": "Boissons",
@@ -408,7 +455,8 @@
       "price": 50,
       "description": "À partir de 50 € (jusqu’à 80 € selon la marque).",
       "containsAlcohol": true,
-      "isPopular": false
+      "isPopular": false,
+      "media": "champagne.jpg"
     },
     {
       "category": "Boissons",
@@ -416,7 +464,8 @@
       "price": 70,
       "description": "",
       "containsAlcohol": true,
-      "isPopular": false
+      "isPopular": false,
+      "media": "whisky-bouteille.jpg"
     },
     {
       "category": "Boissons",
@@ -424,7 +473,8 @@
       "price": 40,
       "description": "",
       "containsAlcohol": true,
-      "isPopular": false
+      "isPopular": false,
+      "media": "whisky-demi.jpg"
     },
     {
       "category": "Boissons",
@@ -432,7 +482,8 @@
       "price": 60,
       "description": "",
       "containsAlcohol": true,
-      "isPopular": false
+      "isPopular": false,
+      "media": "bourbon-bouteille.jpg"
     },
     {
       "category": "Boissons",
@@ -440,7 +491,8 @@
       "price": 35,
       "description": "",
       "containsAlcohol": true,
-      "isPopular": false
+      "isPopular": false,
+      "media": "bourbon-demi.jpg"
     },
     {
       "category": "Boissons",
@@ -448,7 +500,8 @@
       "price": 60,
       "description": "",
       "containsAlcohol": true,
-      "isPopular": false
+      "isPopular": false,
+      "media": "vodka.jpg"
     }
   ],
   "claimsPlace": "curated/o-saveurs-d-afrique-annemasse"

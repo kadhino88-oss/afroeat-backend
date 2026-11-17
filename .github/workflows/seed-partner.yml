@@ -32,4 +32,5 @@ jobs:
         env:
           MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
           PARTNER: ${{ inputs.partner }}
+          PUBLIC_API_URL: https://afroeat-api-staging.vercel.app
         run: node scripts/seed-partner.js

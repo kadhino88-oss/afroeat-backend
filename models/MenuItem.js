@@ -47,6 +47,12 @@ const menuItemSchema = new mongoose.Schema(
       maxlength: [500, 'L’URL de l’image est trop longue'],
     },
 
+    // Photo d'illustration (générée en attendant les vraies photos du commerce) : affichée avec une mention.
+    imageIsIllustration: {
+      type: Boolean,
+      default: false,
+    },
+
     category: {
       type: String,
       default: 'Plats principaux',
