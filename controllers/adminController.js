@@ -3,6 +3,13 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const Order = require('../models/Order');
+const PromoCode = require('../models/PromoCode');
+const { maybeExpireStaleOrders } = require('../utils/staleOrders');
+
+const adminStripeClient = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+// Le tableau de bord admin déclenche aussi l'annulation des commandes sans suite et le rattrapage des remboursements.
+const refreshOrdersOpportunistically = () =>
+  maybeExpireStaleOrders({ Order, PromoCode, stripe: adminStripeClient }).catch(() => null);
 const { createAuditLog } = require('./adminAuditController');
 const { validateCourierVerificationUpdate } = require('../utils/courierAssignmentEligibility');
 
@@ -852,6 +859,7 @@ const getAdminDrivers = async (req, res) => {
 const getAdminOrders = async (req, res) => {
   try {
     if (!ensureAdmin(req, res)) return;
+    await refreshOrdersOpportunistically();
 
     const { page, limit, skip } = buildPagination(req.query);
     const sort = parseSort(req.query.sort, ['recent', 'oldest']);
@@ -909,6 +917,7 @@ const getAdminOrders = async (req, res) => {
 const getAdminOrderById = async (req, res) => {
   try {
     if (!ensureAdmin(req, res)) return;
+    await refreshOrdersOpportunistically();
 
     const { id } = req.params;
 
