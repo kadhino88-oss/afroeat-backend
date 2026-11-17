@@ -58,6 +58,10 @@ const sanitizeMenuPayload = (body = {}) => {
     payload.isRecommended = normalizeBoolean(payload.isRecommended, false);
   }
 
+  if (payload.containsAlcohol !== undefined) {
+    payload.containsAlcohol = normalizeBoolean(payload.containsAlcohol, false);
+  }
+
   return payload;
 };
 
@@ -339,6 +343,7 @@ router.post(
         available,
         isPopular,
         isRecommended,
+        containsAlcohol,
       } = payload;
 
       if (!restaurant || !name || price === undefined) {
@@ -380,6 +385,7 @@ router.post(
         available: available !== undefined ? available : true,
         isPopular: isPopular !== undefined ? isPopular : false,
         isRecommended: isRecommended !== undefined ? isRecommended : false,
+        containsAlcohol: containsAlcohol === true,
       });
 
       await menuItem.save();

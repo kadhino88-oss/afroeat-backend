@@ -360,6 +360,16 @@ const orderSchema = new mongoose.Schema(
     promoReleased: { type: Boolean, default: false },
     refundRequestedAt: { type: Date, default: null },
     refundError: { type: String, default: '', trim: true, maxlength: 300 },
+    // Commande avec alcool : majorité confirmée par le client, pièce d'identité à contrôler à la remise.
+    containsAlcohol: {
+      type: Boolean,
+      default: false,
+    },
+    ageConfirmedAt: {
+      type: Date,
+      default: null,
+    },
+
     refundedAt: {
       type: Date,
       default: null,

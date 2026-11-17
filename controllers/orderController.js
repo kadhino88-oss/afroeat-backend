@@ -21,6 +21,7 @@ const PromoCode = require('../models/PromoCode');
 const { resolvePromo, claimPromoUse } = require('./promoController');
 const { releasePromoForOrder } = require('../utils/promoCodes');
 const { maybeExpireStaleOrders } = require('../utils/staleOrders');
+const { orderContainsAlcohol, isAgeConfirmed, ageCheckError } = require('../utils/alcohol');
 
 const stripeClient = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
@@ -805,7 +806,7 @@ const createOrder = async (req, res) => {
       restaurant: restaurantExists._id,
       available: { $ne: false },
     })
-      .select('_id restaurant name price image available')
+      .select('_id restaurant name price image available containsAlcohol')
       .lean();
 
     const trustedItemsResult = buildTrustedOrderItems({
@@ -813,6 +814,11 @@ const createOrder = async (req, res) => {
       menuItems,
       restaurantId: restaurantExists._id,
     });
+
+    const containsAlcohol = orderContainsAlcohol(menuItems);
+    if (containsAlcohol && !isAgeConfirmed(req.body?.ageConfirmed)) {
+      return res.status(400).json(ageCheckError());
+    }
 
     if (!trustedItemsResult.ok) {
       const statusCode = trustedItemsResult.code === 'MENU_ITEM_UNAVAILABLE' ? 409 : 400;
@@ -927,6 +933,8 @@ const createOrder = async (req, res) => {
       donationAmount: 0,
       promoCode: promoResult.promo?.code || '',
       discountAmount,
+      containsAlcohol,
+      ageConfirmedAt: containsAlcohol ? new Date() : null,
       driverEarning: marketplaceSplit.driverEarning,
       marketplaceSplitCalculated: true,
       commissionRateBps: marketplaceSplit.commissionRateBps,
@@ -1391,7 +1399,7 @@ const getOrderQuote = async (req, res) => {
       restaurant: restaurantDoc._id,
       available: { $ne: false },
     })
-      .select('_id restaurant name price image available')
+      .select('_id restaurant name price image available containsAlcohol')
       .lean();
 
     const trusted = buildTrustedOrderItems({
@@ -1464,6 +1472,7 @@ const getOrderQuote = async (req, res) => {
         promoCode: promoQuote.promo?.code || '',
         totalPrice: roundMoney(pricing.totalPrice - (promoQuote.discount || 0)),
         currency: pricing.currency,
+        containsAlcohol: orderContainsAlcohol(menuItems),
       },
     });
   } catch (error) {
