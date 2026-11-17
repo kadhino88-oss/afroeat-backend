@@ -56,8 +56,10 @@ router.post('/expire-stale-orders', async (req, res) => {
     const Order = require('../models/Order');
     const { expireStaleOrders } = require('../utils/staleOrders');
     const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+    const { reconcileRefunds } = require('../utils/orderRefund');
     const result = await expireStaleOrders({ Order, stripe });
-    return res.json({ success: true, ...result });
+    const refundsReconciled = await reconcileRefunds({ Order, stripe });
+    return res.json({ success: true, ...result, refundsReconciled });
   } catch (error) {
     console.error('expire-stale-orders:', error.message);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
