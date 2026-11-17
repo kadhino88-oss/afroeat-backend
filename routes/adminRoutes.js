@@ -143,6 +143,7 @@ router.get('/verification/:id/file', getVerificationDocumentFile);
 router.patch('/verification/:id', reviewVerificationDocument);
 
 router.use('/audit-logs', adminAuditRoutes);
+router.patch('/reviews/:id', require('../controllers/reviewController').setReviewHidden);
 router.use('/ops', adminOpsRoutes);
 
 module.exports = router;

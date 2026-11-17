@@ -123,6 +123,9 @@ router.get('/:id', protect, canAccessOrder, getOrderById);
  * - client
  * - admin
  */
+const { createReview, getMyOrderReview } = require('../controllers/reviewController');
+router.post('/:id/review', protect, allowRoles('client'), createReview);
+router.get('/:id/review', protect, allowRoles('client'), getMyOrderReview);
 router.post('/quote', protect, allowRoles('client', 'admin'), getOrderQuote);
 router.post('/', protect, allowRoles('client', 'admin'), createOrder);
 

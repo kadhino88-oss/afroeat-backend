@@ -227,6 +227,8 @@ const buildDriverProfileResponse = (driver) => {
     isAvailable: Boolean(safeDriver.isAvailable),
     deliveryProfile: {
       vehicleType: safeDriver.deliveryProfile?.vehicleType || '',
+      ratingAverage: Number(safeDriver.deliveryProfile?.ratingAverage || 0),
+      ratingCount: Number(safeDriver.deliveryProfile?.ratingCount || 0),
       vehicleBrand: safeDriver.deliveryProfile?.vehicleBrand || '',
       vehicleColor: safeDriver.deliveryProfile?.vehicleColor || '',
       plateNumber: safeDriver.deliveryProfile?.plateNumber || '',

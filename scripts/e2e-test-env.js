@@ -305,6 +305,19 @@ const main = async () => {
     return `${mine.amount} ${mine.currency} sur ${mine.orderAmount}`;
   });
 
+  await step('client : laisse un avis sur la commande livrée (une seule fois)', async () => {
+    const response = await call('POST', `/orders/${state.orderId}/review`, {
+      token: state.client.token,
+      body: { restaurantRating: 5, courierRating: 5, comment: `Très bon (e2e ${run})` },
+    });
+    expectStatus(response, 201);
+    const again = await call('POST', `/orders/${state.orderId}/review`, { token: state.client.token, body: { restaurantRating: 4 } });
+    expect(again.status === 409, `second avis accepté (${again.status})`);
+    const list = await call('GET', `/restaurants/${state.restaurantId}/reviews`);
+    expectStatus(list, 200, 'avis publics : ');
+    expect((list.json?.reviews || []).some((r) => String(r.comment).includes(run)), 'avis absent de la fiche');
+  });
+
   await step('paiement par carte : session Stripe créée (sans payer)', async () => {
     const created = await createOrder({ items: [{ menuItem: String(state.yassa._id), quantity: 1 }], total: Number(state.yassa.price) + 3 });
     expect(created.status === 201 || created.status === 200, `commande ${created.status}`);

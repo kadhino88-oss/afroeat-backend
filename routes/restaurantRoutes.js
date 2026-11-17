@@ -32,6 +32,7 @@ router.get(
   getMyRestaurant
 );
 
+router.get('/:id/reviews', require('../controllers/reviewController').getRestaurantReviews);
 router.get('/:id', getRestaurantById);
 
 router.post(

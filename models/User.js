@@ -278,6 +278,10 @@ const userSchema = new mongoose.Schema(
         type: Date,
         default: null,
       },
+
+      // Note moyenne laissée par les clients après livraison.
+      ratingAverage: { type: Number, default: 0, min: 0, max: 5 },
+      ratingCount: { type: Number, default: 0, min: 0 },
     },
 
     restaurantProfile: {
