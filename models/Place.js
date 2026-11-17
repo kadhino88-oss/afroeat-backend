@@ -13,6 +13,10 @@ const placeSchema = new mongoose.Schema(
     phone: { type: String, default: '' },
     website: { type: String, default: '' },
     openingHours: { type: String, default: '' },
+    // Visuels repris du site du commerce (image de partage og:image et icône), en attendant son affiliation.
+    imageUrl: { type: String, default: '' },
+    logoUrl: { type: String, default: '' },
+    mediaCheckedAt: { type: Date, default: null },
     isAfrican: { type: Boolean, default: false, index: true },
     location: {
       type: { type: String, enum: ['Point'], default: 'Point' },
