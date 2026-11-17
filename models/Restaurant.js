@@ -143,6 +143,14 @@ const restaurantSchema = new mongoose.Schema(
       maxlength: [1200, "L'URL de l'image de couverture est trop longue"],
     },
 
+    // Logo du commerce (affiché dans la pastille de la fiche et sur les cartes).
+    logo: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [1200, "L'URL du logo est trop longue"],
+    },
+
     phone: {
       type: String,
       default: '',
@@ -420,6 +428,7 @@ restaurantSchema.pre('validate', function () {
     this.cuisine = normalizeString(this.cuisine);
     this.image = normalizeString(this.image);
     this.coverImage = normalizeString(this.coverImage);
+  this.logo = normalizeString(this.logo);
     this.phone = normalizeString(this.phone);
     this.email = normalizeString(this.email).toLowerCase();
     this.address = normalizeString(this.address);

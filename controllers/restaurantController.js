@@ -343,6 +343,7 @@ const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
   payload.email       = normalizeText(reqBody.email);
   payload.image       = normalizeText(reqBody.image);
   payload.coverImage  = normalizeText(reqBody.coverImage);
+  payload.logo        = normalizeText(reqBody.logo);
   payload.currency    = normalizeText(reqBody.currency, 'EUR').toUpperCase();
   payload.deliveryFee = normalizeNumber(reqBody.deliveryFee, 0);
 
@@ -375,6 +376,7 @@ const buildUpdatePayload = async (reqBody = {}) => {
   if (reqBody.email       !== undefined) payload.email       = normalizeText(reqBody.email);
   if (reqBody.image       !== undefined) payload.image       = normalizeText(reqBody.image);
   if (reqBody.coverImage  !== undefined) payload.coverImage  = normalizeText(reqBody.coverImage);
+  if (reqBody.logo        !== undefined) payload.logo        = normalizeText(reqBody.logo);
   if (reqBody.currency    !== undefined) payload.currency    = normalizeText(reqBody.currency, 'EUR').toUpperCase();
   if (reqBody.openingHours !== undefined) {
     const hours = normalizeOpeningHours(reqBody.openingHours);

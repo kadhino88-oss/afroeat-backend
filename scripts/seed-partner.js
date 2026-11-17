@@ -37,6 +37,8 @@ const loadPartner = (key) => {
   if (!data.owner?.email || !data.restaurant?.name || !Array.isArray(data.items)) {
     throw new Error('Fichier partenaire incomplet (owner.email, restaurant.name, items).');
   }
+  const logoFile = mediaPath(key, data.logoMedia);
+  if (logoFile && !fs.existsSync(logoFile)) throw new Error(`Logo introuvable : ${data.logoMedia}`);
   for (const item of data.items) {
     if (!item.name || !Number.isFinite(item.price) || item.price < 0) {
       throw new Error(`Plat invalide : ${JSON.stringify(item)}`);
@@ -122,6 +124,21 @@ const main = async () => {
     );
     if (result.upsertedCount) created += 1;
     else updated += 1;
+  }
+
+  // Logo du commerce : posé seulement si la fiche n'en a pas encore (un logo choisi ensuite n'est jamais remplacé).
+  const logoFile = mediaPath(process.env.PARTNER, data.logoMedia);
+  if (logoFile) {
+    const current = await Restaurant.findById(restaurant._id).select('logo');
+    if (!current?.logo) {
+      const bytes = fs.readFileSync(logoFile);
+      const image = await UploadedImage.create({ owner: owner._id, contentType: 'image/jpeg', data: bytes, size: bytes.length });
+      await Restaurant.updateOne(
+        { _id: restaurant._id, logo: { $in: ['', null] } },
+        { $set: { logo: `${PUBLIC_API_URL}/api/images/${image._id}` } }
+      );
+      console.log('Logo ajouté.');
+    }
   }
 
   // Photos d'illustration : posées seulement sur les plats sans photo (une vraie photo n'est jamais remplacée).

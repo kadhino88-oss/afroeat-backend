@@ -14,7 +14,7 @@ const listFavorites = async (req, res) => {
     const ids = Array.isArray(user?.favoriteRestaurants) ? user.favoriteRestaurants : [];
     const restaurants = ids.length
       ? await Restaurant.find({ _id: { $in: ids }, isActive: { $ne: false } })
-          .select('_id name description cuisine image coverImage address city isOpen businessType')
+          .select('_id name description cuisine image coverImage logo address city isOpen businessType')
           .lean()
       : [];
     return res.json({ success: true, restaurants });
