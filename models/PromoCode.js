@@ -16,6 +16,11 @@ const promoCodeSchema = new mongoose.Schema(
     expiresAt: { type: Date, default: null },
     active: { type: Boolean, default: true, index: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    // Parrainage : code personnel d'un client (owner) ou récompense réservée à un client (restrictedTo).
+    kind: { type: String, enum: ['standard', 'referral', 'referral_reward'], default: 'standard' },
+    owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    restrictedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    sourceOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: null },
   },
   { timestamps: true }
 );

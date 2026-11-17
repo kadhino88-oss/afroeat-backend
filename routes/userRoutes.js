@@ -64,6 +64,7 @@ router.get('/account-deletion', accountDeletionPage);
 router.get('/me', protect, getMe);
 router.get('/me/export', protect, exportMyData);
 router.delete('/me/account', protect, deleteMyAccount);
+router.get('/me/referral', protect, allowRoles('client'), require('../controllers/promoController').getMyReferral);
 router.get('/me/addresses', protect, allowRoles('client'), listAddresses);
 router.post('/me/addresses', protect, allowRoles('client'), createAddress);
 router.delete('/me/addresses/:id', protect, allowRoles('client'), deleteAddress);
