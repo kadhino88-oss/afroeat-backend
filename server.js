@@ -173,7 +173,7 @@ app.use(
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isProduction ? 200 : 1000,
+  max: isProduction ? 1500 : 3000, // tableaux de bord actualisés en direct (livreur, restaurant, messagerie)
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => req.path.includes('/webhook'),
@@ -219,7 +219,15 @@ app.use('/api/users/register', authLimiter);
 app.use('/api/users/me/password', authLimiter);
 app.use('/api/users/forgot-password', authLimiter);
 app.use('/api/users/reset-password', authLimiter);
-app.use('/api/orders', orderLimiter);
+// Limite anti-abus sur la seule création de commande : la consultation (suivi, alertes restaurant,
+// messagerie actualisées toutes les quelques secondes) ne doit jamais bloquer un utilisateur.
+const quoteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isProduction ? 150 : 1000,
+  message: { success: false, message: 'Trop de demandes de devis. Réessaie dans quelques minutes.' },
+});
+app.post('/api/orders', orderLimiter);
+app.post('/api/orders/quote', quoteLimiter);
 app.use('/api/payments', paymentLimiter);
 
 app.use((req, res, next) => {

@@ -329,7 +329,7 @@ const main = async () => {
   });
 
   await step('paiement par carte : session Stripe créée (sans payer)', async () => {
-    const created = await createOrder({ items: [{ menuItem: String(state.yassa._id), quantity: 1 }], total: Number(state.yassa.price) + 3 });
+    const created = await createOrder({ items: [{ menuItem: String(state.yassa._id), quantity: 1 }], total: Number(state.yassa.price) + 4 });
     expect(created.status === 201 || created.status === 200, `commande ${created.status}`);
     const orderId = orderIdOf(created.json);
     const response = await call('POST', '/payments/checkout', {
@@ -354,7 +354,8 @@ const main = async () => {
       expectStatus(response, 200);
     });
     await step('livraison par le restaurant : commande en espèces, du restaurant jusqu’à la remise', async () => {
-      let response = await createOrder({ items, total: expectedTotal });
+      // Le restaurant livre lui-même : ses frais (3 CHF) ne sont pas relevés au minimum livreur.
+      let response = await createOrder({ items, total: expectedTotal - 1 });
       expect(response.status === 201 || response.status === 200, `commande : ${response.status} (${response.json?.code || response.json?.message})`);
       const orderId = orderIdOf(response.json);
       expect(response.json?.order?.selfDelivery === true, 'commande non marquée « livrée par le restaurant »');
