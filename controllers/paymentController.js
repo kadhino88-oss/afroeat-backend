@@ -65,6 +65,8 @@ const hasStripeTestSecret = () =>
 const canCreateCardPayment = () =>
   !isProductionLocked() && Boolean(stripe) && (hasStripeTestSecret() || isLiveCommerceOpen());
 
+const { isCashAllowedForOrder } = require('../utils/cashPayment');
+
 const stripeUnavailable = (res) =>
   res.status(503).json({
     success: false,
@@ -782,28 +784,30 @@ const handleWebhook = async (req, res) => {
   return res.status(200).json({ received: true });
 };
 
-const getAvailablePaymentMethods = (req, res) => {
+const getAvailablePaymentMethods = async (req, res) => {
+  let cash = !isRealProduction();
+  const orderId = req.query?.orderId;
+  if (isRealProduction() && orderId && isValidObjectId(orderId)) {
+    try {
+      const { order } = await getAuthorizedOrder(orderId, req);
+      cash = isCashAllowedForOrder(order);
+    } catch {
+      cash = false;
+    }
+  }
   return res.status(200).json({
     success: true,
     methods: {
       // Fermé tant que le commerce réel n'est pas ouvert et entièrement configuré.
       card: canCreateCardPayment(),
-      // Cash remains unavailable in real production until collection and
-      // settlement reconciliation are implemented.
-      cash: !isRealProduction(),
+      // Espèces : en production, seulement si le restaurant encaisse lui-même (livraison par le
+      // restaurant ou retrait) ; sa commission est alors inscrite au registre.
+      cash,
     },
   });
 };
 
 const selectCashPayment = async (req, res) => {
-  if (isRealProduction()) {
-    return res.status(503).json({
-      success: false,
-      code: 'CASH_ON_DELIVERY_DISABLED',
-      message: 'Le paiement à la livraison est désactivé en production tant que le registre de collecte et de règlement n’est pas disponible.',
-    });
-  }
-
   try {
     const { orderId } = req.body || {};
     if (!orderId || !isValidObjectId(orderId)) {
@@ -827,9 +831,25 @@ const selectCashPayment = async (req, res) => {
       });
     }
 
+    if (!isCashAllowedForOrder(order)) {
+      return res.status(409).json({
+        success: false,
+        code: 'CASH_ON_DELIVERY_DISABLED',
+        message: 'Le paiement en espèces n’est proposé que si le restaurant livre lui-même ou pour un retrait sur place.',
+      });
+    }
+
+    const firstSelection = order.paymentMethod !== 'cash';
     order.paymentMethod = 'cash';
     order.lastPaymentError = '';
+    if (order.cashCommissionStatus !== 'settled') order.cashCommissionStatus = 'due';
+    if (order.status === 'En attente') order.status = 'Confirmée';
     await order.save();
+
+    // Le restaurant encaisse : il est prévenu comme pour une commande payée (jamais bloquant).
+    if (firstSelection) {
+      await require('../utils/courierDispatch').notifyRestaurantNewOrder(order).catch(() => {});
+    }
 
     return res.status(200).json({
       success: true,
