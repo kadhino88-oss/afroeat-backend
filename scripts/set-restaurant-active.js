@@ -17,6 +17,14 @@ const main = async () => {
   const update = { isActive: active };
   const openInput = String(process.env.OPEN || '').trim().toLowerCase();
   if (openInput === 'true' || openInput === 'false') update.isOpen = openInput === 'true';
+  for (const [env, field] of [['DELIVERY_FEE', 'deliveryFee'], ['MIN_ORDER', 'minimumOrderAmount']]) {
+    const raw = String(process.env[env] || '').trim();
+    if (raw !== '') {
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value < 0 || value > 100) throw new Error(`${env} invalide.`);
+      update[field] = value;
+    }
+  }
   const result = await Restaurant.updateOne({ _id: RESTAURANT_ID }, { $set: update });
   console.log(`${JSON.stringify(update)} : ${result.matchedCount} fiche(s) trouvée(s), ${result.modifiedCount} modifiée(s).`);
 };
