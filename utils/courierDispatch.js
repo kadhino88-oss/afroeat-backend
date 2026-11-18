@@ -31,9 +31,10 @@ const distanceKm = (a, b) => {
 /** Filtre Mongo des commandes qu'un livreur peut prendre. */
 const availableOrderFilter = (now = Date.now()) => ({
   status: { $in: OPEN_ORDER_STATUSES },
-  paymentStatus: 'Payé',
   selfDelivery: { $ne: true },
   $and: [
+    // Payée en ligne, ou à encaisser en espèces par le livreur à la remise.
+    { $or: [{ paymentStatus: 'Payé' }, { paymentMethod: 'cash', paymentStatus: { $ne: 'Remboursé' } }] },
     { $or: [{ deliveryPerson: null }, { deliveryPerson: { $exists: false } }] },
     // Commande programmée : proposée aux livreurs 45 minutes avant l'heure prévue.
     { $or: [{ scheduledFor: null }, { scheduledFor: { $exists: false } }, { scheduledFor: { $lte: new Date(now + 45 * 60000) } }] },
