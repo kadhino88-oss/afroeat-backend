@@ -301,6 +301,8 @@ const orderSchema = new mongoose.Schema(
     // Espèces : commission de la plateforme due par le restaurant qui a encaissé la commande.
     cashCommissionStatus: { type: String, enum: ['none', 'due', 'settled'], default: 'none' },
     cashCommissionSettledAt: { type: Date, default: null },
+    // Espèces encaissées par un livreur : date à laquelle la plateforme a réglé la part du restaurant.
+    cashRestaurantPaidAt: { type: Date, default: null },
 
     marketplaceSplitCalculated: { type: Boolean, default: false },
     commissionRateBps: { type: Number, default: 0, min: 0, max: 10000, validate: { validator: Number.isInteger, message: 'Taux commission invalide' } },

@@ -40,7 +40,9 @@ test('position du restaurant : commande puis fiche restaurant', () => {
 
 test('seules les commandes payées, livrées par AFROEAT et sans livreur sont disponibles', () => {
   const f = availableOrderFilter();
-  assert.equal(f.paymentStatus, 'Payé');
+  // Payées en ligne, ou à encaisser en espèces par le livreur (jamais les commandes carte non payées).
+  assert.deepEqual(f.$and[0].$or[0], { paymentStatus: 'Payé' });
+  assert.equal(f.$and[0].$or[1].paymentMethod, 'cash');
   assert.deepEqual(f.selfDelivery, { $ne: true });
   assert.deepEqual(f.status.$in, ['Confirmée', 'En préparation']);
 });
