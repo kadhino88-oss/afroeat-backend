@@ -18,6 +18,16 @@ on:
         required: false
         type: string
         default: ""
+      delivery_fee:
+        description: "Frais de livraison (vide = inchangé)"
+        required: false
+        type: string
+        default: ""
+      min_order:
+        description: "Minimum de commande (vide = inchangé)"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -42,4 +52,6 @@ jobs:
           RESTAURANT_ID: ${{ inputs.restaurant_id }}
           ACTIVE: ${{ inputs.active }}
           OPEN: ${{ inputs.open }}
+          DELIVERY_FEE: ${{ inputs.delivery_fee }}
+          MIN_ORDER: ${{ inputs.min_order }}
         run: node scripts/set-restaurant-active.js
