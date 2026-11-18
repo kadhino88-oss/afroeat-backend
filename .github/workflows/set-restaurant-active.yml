@@ -13,6 +13,11 @@ on:
         required: true
         type: boolean
         default: true
+      open:
+        description: "Ouvert aux commandes : true, false, ou vide pour ne pas changer"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -36,4 +41,5 @@ jobs:
           MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
           RESTAURANT_ID: ${{ inputs.restaurant_id }}
           ACTIVE: ${{ inputs.active }}
+          OPEN: ${{ inputs.open }}
         run: node scripts/set-restaurant-active.js
