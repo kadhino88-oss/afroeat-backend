@@ -640,7 +640,8 @@ const main = async () => {
 
   await step('nouveau livreur : aucune course tant que l’admin ne l’a pas vérifié', async () => {
     expect(state.newCourier?.id, 'livreur non créé');
-    const created = await createOrder({ items: [{ menuItem: String(state.yassa._id), quantity: 1 }], total: Number(state.yassa.price) + 3 });
+    const created = await createOrder({ items: [{ menuItem: String(state.yassa._id), quantity: 1 }], total: Number(state.yassa.price) + 4 });
+    expect(created.status === 201 || created.status === 200, `commande ${created.status} (${created.json?.code || ''})`);
     const orderId = orderIdOf(created.json);
     const response = await call('PUT', `/orders/${orderId}/assign-driver`, {
       token: state.owner.token,
