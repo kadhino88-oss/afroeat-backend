@@ -134,7 +134,7 @@ test('setup-intent : crée le client Stripe puis un SetupIntent hors-session', a
   const intent = stripe.calls.find(([name]) => name === 'setupIntents.create')[1];
   assert.equal(intent.customer, 'cus_new');
   assert.equal(intent.usage, 'off_session');
-  assert.deepEqual(intent.payment_method_types, ['card']);
+  assert.deepEqual(intent.automatic_payment_methods, { enabled: true, allow_redirects: 'never' });
 });
 
 test('setup-intent : réutilise le client existant (aucune création)', async () => {

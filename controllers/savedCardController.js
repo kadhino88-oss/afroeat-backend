@@ -225,7 +225,7 @@ const createSavedCardController = ({ stripe, User }) => {
 
       const setupIntent = await stripe.setupIntents.create({
         customer: customerId,
-        payment_method_types: ['card'],
+        automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
         usage: 'off_session',
         metadata: { userId: String(req.user._id), platform: 'afroeat' },
       });
