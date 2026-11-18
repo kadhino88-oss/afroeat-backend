@@ -1,0 +1,39 @@
+name: Activer ou masquer un commerce (base officielle)
+
+# Bouton manuel. Secret requis : PLACES_MONGO_URI (la base officielle).
+on:
+  workflow_dispatch:
+    inputs:
+      restaurant_id:
+        description: "Identifiant du commerce"
+        required: true
+        type: string
+      active:
+        description: "Visible par les clients (sinon masqué)"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  set-active:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Appliquer
+        env:
+          MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
+          RESTAURANT_ID: ${{ inputs.restaurant_id }}
+          ACTIVE: ${{ inputs.active }}
+        run: node scripts/set-restaurant-active.js
