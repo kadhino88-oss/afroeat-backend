@@ -126,6 +126,12 @@ router.get('/restaurants/:id', getAdminRestaurantById);
 router.get('/drivers', getAdminDrivers);
 
 /**
+ * Registre des commissions dues sur les commandes payées en espèces
+ */
+router.get('/cash-ledger', require('../controllers/cashLedgerController').listCashLedger);
+router.post('/cash-ledger/:restaurantId/settle', require('../controllers/cashLedgerController').settleCashLedger);
+
+/**
  * Orders
  */
 router.get('/orders', getAdminOrders);
