@@ -249,7 +249,7 @@ const createPaymentIntent = async (req, res) => {
         amount: toStripeAmount(amount, currency),
         currency: currency.toLowerCase(),
         customer: stripeCustomerId,
-        payment_method_types: ['card'],
+        automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
         capture_method: 'automatic',
         description: `Commande AFROEAT #${order._id}`,
         receipt_email: order.user?.email || undefined,
