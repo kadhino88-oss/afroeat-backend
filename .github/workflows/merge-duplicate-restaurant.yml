@@ -1,0 +1,45 @@
+name: Fusionner un commerce en double (base officielle)
+
+# Bouton manuel. Par défaut : simulation (rien n'est modifié). Cocher « apply » pour appliquer.
+# Secret requis : PLACES_MONGO_URI (la base officielle).
+on:
+  workflow_dispatch:
+    inputs:
+      keep_id:
+        description: "Identifiant de la fiche à CONSERVER"
+        required: true
+        type: string
+      remove_id:
+        description: "Identifiant de la fiche à SUPPRIMER (son menu passe sur la fiche conservée)"
+        required: true
+        type: string
+      apply:
+        description: "Appliquer réellement (sinon simulation)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Fusionner
+        env:
+          MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
+          KEEP_ID: ${{ inputs.keep_id }}
+          REMOVE_ID: ${{ inputs.remove_id }}
+          APPLY: ${{ inputs.apply }}
+        run: node scripts/merge-duplicate-restaurant.js
