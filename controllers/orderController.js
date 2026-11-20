@@ -49,6 +49,7 @@ const { evaluateCourierAssignmentEligibility } = require('../utils/courierAssign
 const { isConnectPayoutsEnabled } = require('../utils/marketplacePayouts');
 const { createDeliveredOrderTransfers } = require('../utils/marketplacePayouts');
 const { isProductionLocked } = require('../utils/runtimeEnvironment');
+const { buildManualDeliveryAssignmentFilter } = require('../utils/manualDeliveryAssignment');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -1225,25 +1226,65 @@ const assignDriverToOrder = async (req, res) => {
       });
     }
 
-    const order = await Order.findById(req.order._id);
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Commande introuvable.',
+    const previousCourierId = req.order.deliveryPerson || null;
+    if (previousCourierId?.toString() === courier._id.toString()) {
+      const currentOrder = await populateOrder(Order.findById(req.order._id));
+      return res.status(200).json({
+        success: true,
+        duplicate: true,
+        message: 'Ce livreur est déjà assigné à la commande.',
+        order: sanitizeOrderForResponse(currentOrder, req.user?.role),
       });
     }
 
-    order.deliveryPerson = courier._id;
+    const order = await Order.findOneAndUpdate(
+      buildManualDeliveryAssignmentFilter(req.order._id, previousCourierId),
+      {
+        $set: { deliveryPerson: courier._id },
+        $push: {
+          statusHistory: {
+            status: req.order.status,
+            updatedBy: req.user?._id || null,
+            updatedByRole: normalizeString(req.user?.role),
+            note: `${previousCourierId ? 'Livreur réassigné' : 'Livreur assigné'}: ${courier.name || courier._id}`,
+            at: new Date(),
+          },
+        },
+      },
+      { new: true, runValidators: true }
+    );
 
-    pushStatusHistoryEntry(order, {
-      status: order.status,
-      updatedBy: req.user?._id || null,
-      updatedByRole: req.user?.role || '',
-      note: `Livreur assigné: ${courier.name || courier._id}`,
-    });
+    if (!order) {
+      const currentOrder = await Order.findById(req.order._id)
+        .select('deliveryPerson status selfDelivery');
 
-    await order.save();
+      if (!currentOrder) {
+        return res.status(404).json({
+          success: false,
+          message: 'Commande introuvable.',
+        });
+      }
+
+      if (
+        currentOrder.deliveryPerson?.toString() === courier._id.toString() &&
+        !['Livrée', 'Annulée'].includes(currentOrder.status) &&
+        currentOrder.selfDelivery !== true
+      ) {
+        const populatedOrder = await populateOrder(Order.findById(req.order._id));
+        return res.status(200).json({
+          success: true,
+          duplicate: true,
+          message: 'Ce livreur est déjà assigné à la commande.',
+          order: sanitizeOrderForResponse(populatedOrder, req.user?.role),
+        });
+      }
+
+      return res.status(409).json({
+        success: false,
+        code: 'DELIVERY_ASSIGNMENT_CONFLICT',
+        message: 'La commande ou son livreur a changé. Actualise la commande avant de réessayer.',
+      });
+    }
 
     sendPushToUser(courier._id, {
       title: 'Afroeat',

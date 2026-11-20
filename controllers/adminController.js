@@ -4,7 +4,10 @@ const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const Order = require('../models/Order');
 const PromoCode = require('../models/PromoCode');
+const SupportTicket = require('../models/SupportTicket');
 const { maybeExpireStaleOrders } = require('../utils/staleOrders');
+const { CAPTURED_PAYMENT_STATUS_VALUES } = require('../utils/revenueRecognition');
+const { buildAdminFinancePipeline } = require('../utils/adminFinanceSummary');
 
 const adminStripeClient = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 // Le tableau de bord admin déclenche aussi l'annulation des commandes sans suite et le rattrapage des remboursements.
@@ -371,6 +374,8 @@ const getAdminDashboard = async (req, res) => {
       recentUsers,
       recentRestaurants,
       recentOrders,
+      financeByCurrency,
+      openSupportTickets,
     ] = await Promise.all([
       User.countDocuments({}),
       User.countDocuments({ role: 'client' }),
@@ -388,7 +393,7 @@ const getAdminDashboard = async (req, res) => {
       Order.countDocuments({ status: 'Livrée' }),
       Order.countDocuments({ status: 'Annulée' }),
       Order.countDocuments({
-        paymentStatus: { $in: ['paid', 'Payé', 'payé'] },
+        paymentStatus: { $in: CAPTURED_PAYMENT_STATUS_VALUES },
       }),
       Order.countDocuments({
         paymentStatus: { $in: ['unpaid', 'Non payé', 'non payé'] },
@@ -402,6 +407,8 @@ const getAdminDashboard = async (req, res) => {
       Order.countDocuments({
         createdAt: { $gte: sevenDaysAgo },
       }),
+      Order.aggregate(buildAdminFinancePipeline()),
+      SupportTicket.countDocuments({ status: { $in: ['open', 'in_progress'] } }),
     ]);
 
     return res.status(200).json({
@@ -432,6 +439,12 @@ const getAdminDashboard = async (req, res) => {
           paid: paidOrders,
           unpaid: unpaidOrders,
           recent7d: recentOrders,
+        },
+        finance: {
+          byCurrency: financeByCurrency,
+        },
+        support: {
+          openTickets: openSupportTickets,
         },
       },
     });

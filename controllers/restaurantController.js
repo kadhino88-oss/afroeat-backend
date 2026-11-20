@@ -6,6 +6,7 @@ const Restaurant = require('../models/Restaurant');
 const User = require('../models/User');
 const Order = require('../models/Order');
 const MenuItem = require('../models/MenuItem');
+const { isRevenueRecognizedOrder } = require('../utils/revenueRecognition');
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -176,7 +177,6 @@ const batchLoadOrderStats = async (restaurantIds) => {
       const rid    = String(order.restaurant);
       const status = normalizeText(order?.status).toLowerCase();
       const total  = normalizeNumber(order?.totalPrice ?? order?.total ?? order?.totalAmount, 0);
-      const paid   = normalizeText(order?.paymentStatus).toLowerCase();
 
       if (!acc[rid]) acc[rid] = { ...emptyStats };
       acc[rid].totalOrders += 1;
@@ -186,7 +186,7 @@ const batchLoadOrderStats = async (restaurantIds) => {
       if (status.includes('livraison') || status.includes('route') || status.includes('delivery')) acc[rid].deliveringOrders += 1;
       if (status.includes('livrée') || status.includes('livree') || status.includes('delivered'))  acc[rid].deliveredOrders += 1;
       if (status.includes('annul') || status.includes('cancel'))    acc[rid].cancelledOrders += 1;
-      if (paid.includes('paid') || paid.includes('payé') || paid.includes('paye') || status.includes('delivered') || status.includes('livree')) {
+      if (isRevenueRecognizedOrder(order)) {
         acc[rid].revenue += total;
       }
       return acc;
@@ -223,7 +223,6 @@ const getOrderStatsForRestaurant = async (restaurantId) => {
     return orders.reduce((acc, order) => {
       const status = normalizeText(order?.status).toLowerCase();
       const total  = normalizeNumber(order?.totalPrice ?? order?.total ?? order?.totalAmount, 0);
-      const paid   = normalizeText(order?.paymentStatus).toLowerCase();
       acc.totalOrders += 1;
       if (status.includes('pending') || status.includes('attente')) acc.pendingOrders += 1;
       if (status.includes('confirm'))                                acc.confirmedOrders += 1;
@@ -231,7 +230,7 @@ const getOrderStatsForRestaurant = async (restaurantId) => {
       if (status.includes('livraison') || status.includes('route')) acc.deliveringOrders += 1;
       if (status.includes('livrée') || status.includes('livree') || status.includes('delivered')) acc.deliveredOrders += 1;
       if (status.includes('annul') || status.includes('cancel'))   acc.cancelledOrders += 1;
-      if (paid.includes('paid') || paid.includes('payé') || paid.includes('paye') || status.includes('delivered') || status.includes('livree')) {
+      if (isRevenueRecognizedOrder(order)) {
         acc.revenue += total;
       }
       return acc;
