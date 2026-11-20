@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const Order = require('../models/Order');
 const AdminAuditLog = require('../models/AdminAuditLog');
+const { availableOrderFilter } = require('../utils/courierDispatch');
 
 const MS_IN_24_HOURS = 24 * 60 * 60 * 1000;
 const MS_IN_7_DAYS = 7 * 24 * 60 * 60 * 1000;
@@ -255,9 +256,7 @@ const getAdminOpsOverview = async (req, res) => {
         status: 'Annulée',
         createdAt: { $gte: last7Days },
       }),
-      Order.countDocuments({
-        $or: [{ deliveryPerson: null }, { deliveryPerson: { $exists: false } }],
-      }),
+      Order.countDocuments(availableOrderFilter()),
 
       Order.countDocuments({
         paymentStatus: { $in: ['Non payé', 'unpaid', 'UNPAID'] },
