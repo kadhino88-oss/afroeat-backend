@@ -7,6 +7,8 @@ Ce document résume les changements préparés pour revue et distingue les contr
 ## Références vérifiées
 
 - Application : `main` sur `97e354979561de5804d7477c9a75bb96e88eb777` ; le déploiement Vercel de production associé est `READY` et `https://afroeat-app.vercel.app` répond HTTP 200.
+- Le projet Vercel `afroeat-app` est le site web : `vercel.json` exporte Expo vers `dist` et renvoie les routes vers `index.html`. Il ne contient pas de routes backend Vercel ; l’application consomme une API séparée via `EXPO_PUBLIC_API_URL`.
+- Aucun domaine acheté n’est requis pour cet hébergement : le site est déjà accessible sur son domaine Vercel `afroeat-app.vercel.app`. Une API peut également utiliser une adresse `.vercel.app` avant d’ajouter un domaine personnalisé.
 - Backend : `main` sur `fec5e21ae840d8208923737baf59c3df04a9c871` ; le projet Vercel dédié au staging est `READY` et son endpoint de santé répond HTTP 200. La base annoncée par cet endpoint est `afroeat_staging`, connectée.
 - Le bundle JavaScript réellement servi par le site public contient `https://afroeat-api-staging.vercel.app/api`. Cet alias répond HTTP 200 et son endpoint de santé confirme la connexion à `afroeat_staging`. L’application web publiée pointe donc vers le backend staging.
 - La liste des projets Vercel de l’équipe contient `afroeat-api-staging` et `afroeat-api-test`, mais aucun projet backend nommé production. Cela n’exclut pas un backend hébergé ailleurs ; son URL n’a pas été fournie ni vérifiée ici.
