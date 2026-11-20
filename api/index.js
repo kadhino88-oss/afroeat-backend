@@ -2,12 +2,25 @@
 // et garde une connexion MongoDB en cache entre les invocations.
 const mongoose = require('mongoose');
 const app = require('../server');
+const { assertDatabaseEnvironment } = require('../utils/databaseEnvironment');
 
 const MONGO_URI = String(process.env.MONGO_URI || '').trim();
+const DEPLOY_ENVIRONMENT = String(process.env.AFROEAT_DEPLOY_ENV || '').trim();
+const EXPECTED_DATABASE_NAME = String(process.env.AFROEAT_MONGO_DB_NAME || '').trim();
 let connecting = null;
 
 const ensureDatabase = async () => {
-  if (mongoose.connection.readyState === 1) return;
+  const verifyDatabase = () =>
+    assertDatabaseEnvironment({
+      deployEnvironment: DEPLOY_ENVIRONMENT,
+      expectedDatabaseName: EXPECTED_DATABASE_NAME,
+      actualDatabaseName: mongoose.connection?.name,
+    });
+
+  if (mongoose.connection.readyState === 1) {
+    verifyDatabase();
+    return;
+  }
 
   if (!MONGO_URI) {
     throw new Error('MONGO_URI manquant');
@@ -29,6 +42,7 @@ const ensureDatabase = async () => {
   }
 
   await connecting;
+  verifyDatabase();
 };
 
 module.exports = async (req, res) => {
@@ -39,18 +53,19 @@ module.exports = async (req, res) => {
   } catch (error) {
     console.error('MongoDB indisponible =>', error?.message);
 
-    // /health doit répondre même si la base est injoignable (il l'indique).
-    if (!isHealthCheck) {
-      res.statusCode = 503;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(
-        JSON.stringify({
-          success: false,
-          message: 'Base de données indisponible.',
-        })
-      );
-      return;
-    }
+    // Toute erreur de disponibilité ou d'identité de base doit rester fail-closed,
+    // y compris sur /health (ne jamais déclarer prête une API sur la mauvaise base).
+    res.statusCode = 503;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(
+      JSON.stringify({
+        success: false,
+        message: isHealthCheck
+          ? 'API non prête : vérifier la connexion et la base MongoDB configurée.'
+          : 'Base de données indisponible.',
+      })
+    );
+    return;
   }
 
   return app(req, res);

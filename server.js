@@ -14,7 +14,10 @@ const app = express();
 const PORT = Number(process.env.PORT || 5000);
 const HOST = process.env.HOST || '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const DEPLOY_ENVIRONMENT = String(process.env.AFROEAT_DEPLOY_ENV || '').trim();
+const EXPECTED_DATABASE_NAME = String(process.env.AFROEAT_MONGO_DB_NAME || '').trim();
 const MONGO_URI = String(process.env.MONGO_URI || '').trim();
+const { assertDatabaseEnvironment } = require('./utils/databaseEnvironment');
 
 const isProduction = NODE_ENV === 'production';
 const serverStartedAt = Date.now();
@@ -461,6 +464,12 @@ const startServer = async () => {
       autoIndex: NODE_ENV !== 'production',
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
+    });
+
+    assertDatabaseEnvironment({
+      deployEnvironment: DEPLOY_ENVIRONMENT,
+      expectedDatabaseName: EXPECTED_DATABASE_NAME,
+      actualDatabaseName: mongoose.connection.name,
     });
 
     console.log('✅ MongoDB connecté avec succès');
