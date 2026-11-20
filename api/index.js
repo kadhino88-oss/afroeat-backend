@@ -10,6 +10,12 @@ const EXPECTED_DATABASE_NAME = String(process.env.AFROEAT_MONGO_DB_NAME || '').t
 let connecting = null;
 
 const ensureDatabase = async () => {
+  const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+  const isPlaceholderJwtSecret = /^(replace|change[-_ ]?me|placeholder|example)/i.test(jwtSecret);
+  if (!jwtSecret || jwtSecret.length < 32 || isPlaceholderJwtSecret) {
+    throw new Error('JWT_SECRET manquant, trop faible ou encore défini sur une valeur de remplacement');
+  }
+
   const verifyDatabase = () =>
     assertDatabaseEnvironment({
       deployEnvironment: DEPLOY_ENVIRONMENT,

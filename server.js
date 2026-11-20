@@ -17,6 +17,7 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const DEPLOY_ENVIRONMENT = String(process.env.AFROEAT_DEPLOY_ENV || '').trim();
 const EXPECTED_DATABASE_NAME = String(process.env.AFROEAT_MONGO_DB_NAME || '').trim();
 const MONGO_URI = String(process.env.MONGO_URI || '').trim();
+const isVercelRuntime = process.env.VERCEL === '1';
 const { assertDatabaseEnvironment } = require('./utils/databaseEnvironment');
 
 const isProduction = NODE_ENV === 'production';
@@ -68,7 +69,7 @@ const maskMongoUriForLogs = (uri) => {
   }
 };
 
-if (!MONGO_URI) {
+if (!MONGO_URI && !isVercelRuntime) {
   console.error("❌ MONGO_URI manquant dans les variables d'environnement");
   process.exit(1);
 }
@@ -78,7 +79,7 @@ const isPlaceholderJwtSecret = /^(replace|change[-_ ]?me|placeholder|example)/i.
   JWT_SECRET
 );
 
-if (!JWT_SECRET || JWT_SECRET.length < 32 || isPlaceholderJwtSecret) {
+if ((!JWT_SECRET || JWT_SECRET.length < 32 || isPlaceholderJwtSecret) && !isVercelRuntime) {
   console.error(
     '❌ JWT_SECRET manquant, trop faible ou encore défini sur une valeur de remplacement'
   );
