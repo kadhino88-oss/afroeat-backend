@@ -1,3 +1,4 @@
+const { isAdminTwoFactorEnforced, isTwoFactorEnrolmentPath } = require('../utils/adminTwoFactorPolicy');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
@@ -232,6 +233,7 @@ const protect = async (req, res, next) => {
         'restaurantProfile.contactName',
         'adminProfile.permissions',
         'adminProfile.lastAdminActionAt',
+        'twoFactor.enabled',
         'createdAt',
         'updatedAt',
       ].join(' ')
@@ -272,6 +274,20 @@ const protect = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         message: 'Compte non actif. Accès refusé.',
+      });
+    }
+
+    // 2FA obligatoire pour les admins après la date limite (voir utils/adminTwoFactorPolicy.js).
+    if (
+      user.role === 'admin' &&
+      !user.twoFactor?.enabled &&
+      isAdminTwoFactorEnforced() &&
+      !isTwoFactorEnrolmentPath(req.originalUrl || req.url)
+    ) {
+      return res.status(403).json({
+        success: false,
+        code: 'ADMIN_2FA_REQUIRED',
+        message: 'La double authentification est obligatoire pour les administrateurs. Active-la pour continuer.',
       });
     }
 

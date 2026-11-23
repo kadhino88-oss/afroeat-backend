@@ -1,3 +1,4 @@
+const { getEnforceDate } = require('../utils/adminTwoFactorPolicy');
 const { isValidEmailAddress } = require('../utils/emailValidation');
 const jwt = require('jsonwebtoken');
 const { sendMail } = require('../utils/mailer');
@@ -424,7 +425,13 @@ const loginUser = async (req, res) => {
       message: 'Connexion réussie',
       token,
       user: formatUser(user),
-      ...(adminWithout2FA ? { twoFactorRequired: true, mustEnableTwoFactor: true } : {}),
+      ...(adminWithout2FA
+        ? {
+            twoFactorRequired: true,
+            mustEnableTwoFactor: true,
+            ...(getEnforceDate() ? { twoFactorDeadline: getEnforceDate().toISOString() } : {}),
+          }
+        : {}),
     });
   } catch (error) {
     return res.status(500).json({
