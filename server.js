@@ -220,6 +220,10 @@ const paymentLimiter = rateLimit({
 app.use('/api/', globalLimiter);
 app.use('/api/users/login', authLimiter);
 app.use('/api/users/register', authLimiter);
+// Limiteurs qui comptent aussi les réponses réussies (authLimiter les ignore).
+const accountLimits = require('./middleware/accountRateLimits').createAccountRateLimiters({ isProduction });
+app.post('/api/users/register', ...accountLimits.register);
+app.post('/api/users/forgot-password', ...accountLimits.forgotPassword);
 app.use('/api/users/me/password', authLimiter);
 app.use('/api/users/forgot-password', authLimiter);
 app.use('/api/users/reset-password', authLimiter);
