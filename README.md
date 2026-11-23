@@ -32,7 +32,7 @@ The `.env.example` file is a template only. The backend rejects its placeholder 
 - `GET /api/payments/methods` returns the methods allowed by the server for the authenticated user.
 - `POST /api/payments/select-cash` records an explicit cash selection. It has no production lock of its own: cash is blocked in real production only because order creation is locked (see below). Cash is collected by the restaurant (pickup / self-delivery) or by the courier (capped by `CASH_COURIER_MAX_TOTAL`, default 60, **not currency-aware**); the admin cash register aggregates orders and settlement is a bulk update with no declared amount, proof or audit trail.
 - Card PaymentIntent and Checkout creation use the order amount, currency and owner stored in the database; the client only sends `orderId`. Payments are confirmed server-side by re-reading the Stripe object.
-- `POST /api/payments/webhook` uses Stripe's raw signed payload. Handled events: `checkout.session.completed`, `checkout.session.expired`, `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `account.updated`.
+- `POST /api/payments/webhook` uses Stripe's raw signed payload. Handled events: `checkout.session.completed`, `checkout.session.expired`, `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded`, `refund.updated`, `refund.failed`, `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`, `account.updated`. Each event is recorded by `event.id` (`StripeEvent`, TTL 30 days): a replayed event is acknowledged with 200 without re-running its effects, and a failed processing releases the record so Stripe can retry.
 
 ### Production lock
 
@@ -50,12 +50,14 @@ To close it again, remove `AFROEAT_LIVE_COMMERCE` and redeploy. Partner payouts 
 ### Known gaps before production (from the payments review)
 
 P0 (blocking):
-- A cancelled order that is paid late is marked paid and **not refunded** (`markOrderAsPaid` ignores `order.status`).
-- No webhook de-duplication by `event.id`, and `markOrderAsPaid` is not atomic (client confirmation and webhook can both announce the order).
-- Unhandled events: `refund.updated` / `refund.failed`, `charge.dispute.updated` / funds withdrawn, `payment_intent.canceled`, async payment events, `transfer.*`. A lost dispute only raises a flag; transfers are not reversed.
-- Payouts left `pending` / `reconciliation_required` are not retried automatically (admin retry per order only).
-- Connect account events need a separate Connect webhook endpoint with its own signing secret; only one `STRIPE_WEBHOOK_SECRET` is supported today.
-- No tests for the webhook handler or the transfer/reversal flow with Stripe mocked, and no staging evidence yet.
+- Fixed: `markOrderAsPaid` is atomic (conditional update), so webhook and `/confirm` announce an order only once; a payment received for an already cancelled order is refunded automatically (idempotent, `utils/orderRefund.js`) instead of reopening the order. If the refund cannot be issued, it is logged and `refundError` is set for manual reconciliation.
+- Fixed: webhook de-duplication by `event.id`; Stripe-mocked tests now cover `handleWebhook` and `markOrderAsPaid` (`tests/payment*.test.js`, `tests/webhook*.test.js`).
+- Partly handled events: `payment_intent.canceled`, `refund.updated` / `refund.failed` (failure recorded in `refundError`, never marked refunded) and `charge.dispute.updated` (flags the order). Still unhandled: async payment events and `transfer.*`.
+- TODO (needs design): a **lost dispute** only flags the order for manual review (`reconciliation_required`); Connect transfers are not reversed and `funds_withdrawn` / `funds_reinstated` balance movements are not reconciled.
+- TODO: payouts left `pending` / `reconciliation_required` are not retried automatically (admin retry per order only).
+- TODO: Connect account events need a separate Connect webhook endpoint with its own signing secret; only one `STRIPE_WEBHOOK_SECRET` is supported today.
+- TODO: no tests yet for the transfer/reversal flow with Stripe mocked, and no staging evidence yet.
+- Note: in-flight webhook duplicates are acknowledged immediately; a processing lock abandoned by a crash is retaken after 2 minutes.
 
 P1:
 - There is no dedicated ledger: accounting lives in `Order` fields. No Stripe fee / balance-transaction tracking, so net margin is unknown, and no automatic reconciliation against Stripe.
