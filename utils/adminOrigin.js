@@ -1,5 +1,7 @@
 'use strict';
 
+const { trimTrailingSlashes } = require('./trimTrailingSlashes');
+
 /**
  * Verrou d'origine pour l'administration.
  *
@@ -12,13 +14,13 @@
 const listAdminOrigins = (env = process.env) =>
   String(env.ADMIN_WEB_ORIGINS || '')
     .split(',')
-    .map((entry) => entry.trim().replace(/\/+$/, ''))
+    .map((entry) => trimTrailingSlashes(entry.trim()))
     .filter(Boolean);
 
 const isAdminOriginAllowed = (origin, env = process.env) => {
   const allowed = listAdminOrigins(env);
   if (!allowed.length) return true;
-  return allowed.includes(String(origin || '').trim().replace(/\/+$/, ''));
+  return allowed.includes(trimTrailingSlashes(String(origin || '').trim()));
 };
 
 /** À placer sur les routes d'administration, après l'authentification. */
