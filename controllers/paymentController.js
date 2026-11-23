@@ -9,7 +9,7 @@ const {
   isMatchingCheckoutSession,
 } = require('../utils/paymentValidation');
 const { isFullyRefundedCharge } = require('../utils/refundGuards');
-const { refundCancelledOrder } = require('../utils/orderRefund');
+const { refundCancelledOrder, applyRefundResult } = require('../utils/orderRefund');
 const StripeEvent = require('../models/StripeEvent');
 const { claimEvent, completeEvent, releaseEvent } = require('../utils/stripeEventLog');
 const {
@@ -718,6 +718,70 @@ const handleWebhook = async (req, res) => {
           console.log(`❌ Paiement échoué webhook: commande ${orderId}`);
         }
 
+        break;
+      }
+
+      case 'payment_intent.canceled': {
+        const paymentIntent = event.data.object;
+        const orderId = paymentIntent.metadata?.orderId;
+
+        if (orderId && isValidObjectId(orderId)) {
+          // Jamais de rétrogradation d'une commande déjà payée ou remboursée.
+          await Order.findOneAndUpdate(
+            {
+              _id: orderId,
+              stripePaymentIntentId: paymentIntent.id,
+              paymentStatus: { $nin: ['Payé', 'Remboursé'] },
+            },
+            {
+              paymentStatus: 'Non payé',
+              lastPaymentError: `Paiement Stripe annulé${paymentIntent.cancellation_reason ? ` (${paymentIntent.cancellation_reason})` : ''}`.slice(0, 300),
+            }
+          );
+        }
+
+        break;
+      }
+
+      case 'refund.updated':
+      case 'refund.failed': {
+        const refund = event.data.object;
+        const paymentIntentId = typeof refund.payment_intent === 'string'
+          ? refund.payment_intent
+          : refund.payment_intent?.id;
+
+        if (paymentIntentId) {
+          const order = await Order.findOne({ stripePaymentIntentId: paymentIntentId });
+          if (order) {
+            if (refund.status === 'failed' || refund.status === 'canceled' || event.type === 'refund.failed') {
+              // Remboursement en échec : conservé pour réconciliation (administration), jamais « Remboursé ».
+              if (order.paymentStatus !== 'Remboursé') {
+                order.stripeRefundId = refund.id || order.stripeRefundId;
+                order.refundError = `Remboursement Stripe en échec (${refund.failure_reason || refund.status || 'failed'}) : rapprochement requis.`.slice(0, 300);
+                await order.save();
+                console.error(`REMBOURSEMENT STRIPE EN ÉCHEC : commande ${order._id}, refund ${refund.id}.`);
+              }
+            } else if (refund.status === 'succeeded' && order.paymentStatus === 'Payé') {
+              applyRefundResult(order, refund);
+              await order.save();
+            }
+          }
+        }
+
+        break;
+      }
+
+      case 'charge.dispute.updated': {
+        const dispute = event.data.object;
+        const paymentIntentId = typeof dispute.payment_intent === 'string'
+          ? dispute.payment_intent
+          : dispute.payment_intent?.id;
+        // Un litige déjà clos est traité par charge.dispute.closed : une mise à jour tardive ne le rouvre pas.
+        const isClosed = ['won', 'lost', 'warning_closed'].includes(dispute.status);
+        if (paymentIntentId && !isClosed) {
+          await flagOrderDispute(paymentIntentId, dispute.id);
+        }
+        console.warn('Litige Stripe mis à jour :', { disputeId: dispute.id, status: dispute.status });
         break;
       }
 
