@@ -73,6 +73,24 @@ const createPaymentHarness = () => {
     return wrap(d);
   };
 
+  const StripeEvent = require('../../models/StripeEvent');
+  const events = new Map();
+  StripeEvent.create = async (doc) => {
+    await tick();
+    if (events.has(doc._id)) { const e = new Error('E11000 duplicate key'); e.code = 11000; throw e; }
+    events.set(doc._id, { ...doc });
+    return doc;
+  };
+  StripeEvent.findOneAndUpdate = async (filter, update) => {
+    await tick();
+    const d = events.get(filter._id);
+    if (!d || d.status !== filter.status || !(d.lockedAt < filter.lockedAt.$lt)) return null;
+    Object.assign(d, update.$set);
+    return d;
+  };
+  StripeEvent.updateOne = async (filter, update) => { await tick(); const d = events.get(filter._id); if (d) Object.assign(d, update.$set); return {}; };
+  StripeEvent.deleteOne = async (filter) => { await tick(); events.delete(filter._id); return {}; };
+
   const dispatch = require('../../utils/courierDispatch');
   const announced = [];
   dispatch.announcePaidOrder = async (order) => { announced.push(String(order._id)); };
@@ -93,8 +111,13 @@ const createPaymentHarness = () => {
   });
 
   const controller = require('../../controllers/paymentController');
-  return { controller, Order, store, stripe, calls, announced, addOrder, paymentIntent, ORDER_ID, USER_ID, PI_ID, wrap, matches };
+  return { controller, Order, store, events, StripeEvent, stripe, calls, announced, addOrder, paymentIntent, ORDER_ID, USER_ID, PI_ID, wrap, matches };
 };
+
+const createReq = (event, signature = 'valid') => ({
+  headers: { 'stripe-signature': signature },
+  body: Buffer.from(JSON.stringify(event)),
+});
 
 const createRes = () => ({
   statusCode: 200, body: null,
@@ -102,4 +125,4 @@ const createRes = () => ({
   json(b) { this.body = b; return this; },
 });
 
-module.exports = { createPaymentHarness, createRes, ORDER_ID, USER_ID, PI_ID };
+module.exports = { createPaymentHarness, createRes, createReq, ORDER_ID, USER_ID, PI_ID };

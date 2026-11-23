@@ -10,6 +10,8 @@ const {
 } = require('../utils/paymentValidation');
 const { isFullyRefundedCharge } = require('../utils/refundGuards');
 const { refundCancelledOrder } = require('../utils/orderRefund');
+const StripeEvent = require('../models/StripeEvent');
+const { claimEvent, completeEvent, releaseEvent } = require('../utils/stripeEventLog');
 const {
   reverseOrderTransfers,
   flagOrderDispute,
@@ -645,6 +647,20 @@ const handleWebhook = async (req, res) => {
     });
   }
 
+  // Idempotence : un événement déjà reçu (même event.id) est acquitté sans rejouer ses effets.
+  let claimedEvent = false;
+  if (event?.id) {
+    try {
+      if ((await claimEvent(StripeEvent, event)) === 'duplicate') {
+        return res.status(200).json({ received: true, duplicate: true });
+      }
+      claimedEvent = true;
+    } catch (error) {
+      console.error('WEBHOOK EVENT LOG ERROR =>', error?.message);
+      return res.status(500).json({ received: false, code: 'WEBHOOK_PROCESSING_FAILED' });
+    }
+  }
+
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
@@ -811,12 +827,15 @@ const handleWebhook = async (req, res) => {
       default:
         break;
     }
+    if (claimedEvent) await completeEvent(StripeEvent, event).catch((e) => console.error('WEBHOOK EVENT LOG COMPLETE ERROR =>', e?.message));
   } catch (error) {
     console.error('WEBHOOK PROCESSING ERROR =>', {
       type: error?.type,
       code: error?.code,
       message: error?.message,
     });
+    // Libère l'enregistrement pour que Stripe puisse rejouer l'événement.
+    if (claimedEvent) await releaseEvent(StripeEvent, event).catch((e) => console.error('WEBHOOK EVENT LOG RELEASE ERROR =>', e?.message));
     // Return 5xx for transient processing failures so Stripe can retry.
     return res.status(500).json({
       received: false,
