@@ -54,7 +54,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Ouvrir ou fermer l'issue de panne
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           FAILURES: ${{ steps.probe.outputs.failures }}
         with:
