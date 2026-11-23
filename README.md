@@ -19,6 +19,14 @@ The API listens on `http://localhost:5000` by default. `GET /health` reports run
 
 The `.env.example` file is a template only. The backend rejects its placeholder JWT secret. Never commit `.env`, MongoDB credentials, JWT secrets, Stripe secret keys, webhook secrets or signing credentials.
 
+## Security notes
+
+- **Admin 2FA is optional today (decision needed).** An admin login without 2FA still succeeds, but the response carries `twoFactorRequired: true` and `mustEnableTwoFactor: true` so the admin app can force enrolment. Decision to take: once every admin has enabled 2FA (`/api/admin/2fa/*`), make the login refuse admins without 2FA. Nothing is blocked yet, to avoid locking out all admins.
+- Session tokens never carry a `purpose` claim; restricted tokens (2FA challenge, ...) are refused by `protect`.
+- `GET /health` hides the database name/host. To let the e2e script verify the target database, set the same random `HEALTH_DETAILS_TOKEN` (16+ chars) on the server and in the script environment; the script sends it as `x-health-token`. (`.env.example` is not updated here: add the variable there.)
+- Image URLs use `PUBLIC_API_URL` when set, otherwise the request `Host`.
+- Rate limits count every request (not only failures) on `register` (per IP), `forgot-password` (per IP and per e-mail) and `login/2fa` (per challenge token, in addition to the per-IP limit). Counters are in memory per instance, like the other limiters.
+
 ## Payment routes and safety state
 
 - `GET /api/payments/methods` returns the methods allowed by the server for the authenticated user.

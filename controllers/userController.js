@@ -417,11 +417,15 @@ const loginUser = async (req, res) => {
 
     const token = generateToken(user);
 
+    // Administrateur sans 2FA : on ne bloque pas (risque de verrouillage), on signale seulement.
+    const adminWithout2FA = user.role === 'admin' && !user.twoFactor?.enabled;
+
     return res.status(200).json({
       success: true,
       message: 'Connexion réussie',
       token,
       user: formatUser(user),
+      ...(adminWithout2FA ? { twoFactorRequired: true, mustEnableTwoFactor: true } : {}),
     });
   } catch (error) {
     return res.status(500).json({
