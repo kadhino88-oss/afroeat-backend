@@ -7,6 +7,7 @@ const MenuItem = require('../models/MenuItem');
 const Restaurant = require('../models/Restaurant');
 
 const { protect } = require('../middleware/authMiddleware');
+const { escapeRegex } = require('../utils/escapeRegex');
 const { allowRoles } = require('../middleware/roleMiddleware');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -184,11 +185,11 @@ const buildMenuFilterFromQuery = ({ available, includeUnavailable, category, res
   }
 
   if (category) {
-    filter.category = { $regex: normalizeString(category), $options: 'i' };
+    filter.category = { $regex: escapeRegex(normalizeString(category)), $options: 'i' };
   }
 
   if (cuisine) {
-    filter.cuisine = { $regex: normalizeString(cuisine), $options: 'i' };
+    filter.cuisine = { $regex: escapeRegex(normalizeString(cuisine)), $options: 'i' };
   }
 
   if (popular === 'true') {
@@ -744,3 +745,4 @@ router.delete(
 );
 
 module.exports = router;
+module.exports.buildMenuFilterFromQuery = buildMenuFilterFromQuery;
