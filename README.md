@@ -21,7 +21,7 @@ The `.env.example` file is a template only. The backend rejects its placeholder 
 
 ## Security notes
 
-- **Admin 2FA is optional today (decision needed).** An admin login without 2FA still succeeds, but the response carries `twoFactorRequired: true` and `mustEnableTwoFactor: true` so the admin app can force enrolment. Decision to take: once every admin has enabled 2FA (`/api/admin/2fa/*`), make the login refuse admins without 2FA. Nothing is blocked yet, to avoid locking out all admins.
+- **Admin 2FA with a grace period.** Set `ADMIN_2FA_ENFORCE_AFTER` (ISO date, e.g. `2026-12-15T00:00:00Z`). Before that date nothing is blocked: an admin login without 2FA still succeeds and the response carries `twoFactorRequired`, `mustEnableTwoFactor` and `twoFactorDeadline` so the admin app can show a reminder. From that date, an admin without 2FA gets `403 ADMIN_2FA_REQUIRED` on every authenticated route except `/api/admin/2fa/status|setup|enable`, so they can still log in and enrol. Unset or invalid: nothing is enforced. Before the date, make sure every admin has enabled 2FA (`/api/admin/2fa/*`).
 - Session tokens never carry a `purpose` claim; restricted tokens (2FA challenge, ...) are refused by `protect`.
 - `GET /health` hides the database name/host. To let the e2e script verify the target database, set the same random `HEALTH_DETAILS_TOKEN` (16+ chars) on the server and in the script environment; the script sends it as `x-health-token`.
 - Image URLs use `PUBLIC_API_URL` when set, otherwise the request `Host`.
