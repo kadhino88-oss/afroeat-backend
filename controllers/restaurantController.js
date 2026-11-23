@@ -333,7 +333,7 @@ const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
   return payload;
 };
 
-const buildUpdatePayload = async (reqBody = {}) => {
+const buildUpdatePayload = async (reqBody = {}, reqUser = null) => {
   const payload = {};
   if (reqBody.name        !== undefined) payload.name        = normalizeText(reqBody.name);
   if (reqBody.businessType !== undefined) payload.businessType = normalizeBusinessType(reqBody.businessType);
@@ -373,7 +373,8 @@ const buildUpdatePayload = async (reqBody = {}) => {
   if (reqBody.latitude    !== undefined) payload.latitude    = normalizeNumber(reqBody.latitude,  NaN);
   if (reqBody.longitude   !== undefined) payload.longitude   = normalizeNumber(reqBody.longitude, NaN);
 
-  if (reqBody.owner !== undefined) {
+  // Seul un admin peut transférer la propriété ; pour un compte restaurant, `owner` est ignoré.
+  if (reqBody.owner !== undefined && reqUser?.role === 'admin') {
     const ownerId = normalizeText(reqBody.owner);
     if (!ownerId || !isValidObjectId(ownerId)) throw new Error('Propriétaire invalide.');
     const owner = await User.findById(ownerId).select('_id role');
@@ -642,7 +643,7 @@ const updateRestaurant = async (req, res) => {
     if (!canManageRestaurant(req, existingRestaurant)) {
       return res.status(403).json({ success: false, message: "Vous n'avez pas accès à ce restaurant." });
     }
-    const payload          = await buildUpdatePayload(req.body);
+    const payload          = await buildUpdatePayload(req.body, req.user);
 
     // « Placer mon restaurant à son adresse » : le serveur cherche la position de l'adresse.
     if (req.body?.locateFromAddress === true) {
@@ -698,6 +699,7 @@ const deleteRestaurant = async (req, res) => {
 };
 
 module.exports = {
+  buildUpdatePayload,
   getNearbyRestaurants,
   getRestaurants,
   getMyRestaurant,

@@ -290,14 +290,24 @@ app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
     message: 'API Afroeat en ligne',
-    environment: NODE_ENV,
     requestId: req.requestId,
   });
 });
 
+// Détails de la base (nom/hôte) : réservés à qui présente HEALTH_DETAILS_TOKEN (ex. script e2e).
+const hasHealthDetailsAccess = (req) => {
+  const expected = String(process.env.HEALTH_DETAILS_TOKEN || '');
+  const provided = String(req.get('x-health-token') || '');
+  if (expected.length < 16 || provided.length !== expected.length) return false;
+  return require('node:crypto').timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+};
+
 app.get('/health', (req, res) => {
   const readyState = mongoose.connection.readyState;
   const mongoState = getMongoStateLabel(readyState);
+  const databaseDetails = hasHealthDetailsAccess(req)
+    ? { name: mongoose.connection?.name || null, host: mongoose.connection?.host || null }
+    : {};
 
   return res.status(readyState === 1 ? 200 : 503).json({
     success: true,
@@ -316,8 +326,7 @@ app.get('/health', (req, res) => {
       stateCode: readyState,
       stateLabel: mongoState,
       connected: readyState === 1,
-      name: mongoose.connection?.name || null,
-      host: mongoose.connection?.host || null,
+      ...databaseDetails,
     },
     features: {
       stripe: Boolean(process.env.STRIPE_SECRET_KEY),
