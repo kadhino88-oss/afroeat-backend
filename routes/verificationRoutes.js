@@ -2,7 +2,7 @@
 
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { protect } = require('../controllers/userController');
+const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
 const {
   getMyVerification,

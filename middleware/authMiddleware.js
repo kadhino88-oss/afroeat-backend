@@ -162,6 +162,11 @@ const isAccountAllowedToAccessProtectedRoutes = (user) => {
   return AUTHORIZED_ACTIVE_STATUSES.includes(status);
 };
 
+// Un jeton de session ne porte jamais de `purpose` : les jetons à usage restreint
+// (défi 2FA, etc.) signés avec le même secret ne doivent pas ouvrir de session.
+const isSessionTokenPayload = (decoded) =>
+  Boolean(decoded) && typeof decoded === 'object' && decoded.purpose === undefined;
+
 const buildAuthContext = ({ token, decoded, user }) => {
   return {
     token: token || '',
@@ -195,7 +200,7 @@ const protect = async (req, res, next) => {
       });
     }
 
-    if (!decoded?.id) {
+    if (!decoded?.id || !isSessionTokenPayload(decoded)) {
       return res.status(401).json({
         success: false,
         message: 'Token invalide.',
@@ -291,6 +296,7 @@ module.exports = {
   extractBearerToken,
   extractTokenFromCookies,
   extractAccessTokenFromRequest,
+  isSessionTokenPayload,
   sanitizeUserForRequest,
   isAccountAllowedToAccessProtectedRoutes,
 };
