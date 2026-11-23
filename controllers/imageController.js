@@ -4,7 +4,15 @@ const mongoose = require('mongoose');
 const UploadedImage = require('../models/UploadedImage');
 const { parseImageDataUrl, IMAGE_MESSAGES, MAX_IMAGES_PER_USER } = require('../utils/imageUpload');
 
+// Préfère PUBLIC_API_URL (configuré) à l'en-tête Host, contrôlé par le client.
 const publicBase = (req) => {
+  const configured = String(process.env.PUBLIC_API_URL || '').trim();
+  if (configured) {
+    try {
+      const url = new URL(configured);
+      if (url.protocol === 'https:' || url.protocol === 'http:') return url.toString().replace(/\/+$/, '');
+    } catch { /* valeur invalide : repli sur l'hôte de la requête */ }
+  }
   const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
   return `${proto}://${req.get('host')}`;
 };
@@ -60,4 +68,4 @@ const getImage = async (req, res) => {
   }
 };
 
-module.exports = { uploadImage, getImage };
+module.exports = { uploadImage, getImage, publicBase };

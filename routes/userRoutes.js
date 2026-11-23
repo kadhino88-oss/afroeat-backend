@@ -1,6 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 
+const { createAccountRateLimiters } = require('../middleware/accountRateLimits');
 const router = express.Router();
 
 const { protect } = require('../middleware/authMiddleware');
@@ -46,7 +47,7 @@ const loginLimiter = rateLimit({
   message: { success: false, message: 'Trop de tentatives. Réessaie dans quelques minutes.' },
 });
 router.post('/login', loginUser);
-router.post('/login/2fa', loginLimiter, require('../controllers/twoFactorController').completeLogin(generateToken, formatUser));
+router.post('/login/2fa', loginLimiter, createAccountRateLimiters().twoFactorChallenge, require('../controllers/twoFactorController').completeLogin(generateToken, formatUser));
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 

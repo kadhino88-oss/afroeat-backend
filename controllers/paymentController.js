@@ -9,6 +9,9 @@ const {
   isMatchingCheckoutSession,
 } = require('../utils/paymentValidation');
 const { isFullyRefundedCharge } = require('../utils/refundGuards');
+const { refundCancelledOrder, applyRefundResult } = require('../utils/orderRefund');
+const StripeEvent = require('../models/StripeEvent');
+const { claimEvent, completeEvent, releaseEvent } = require('../utils/stripeEventLog');
 const {
   reverseOrderTransfers,
   flagOrderDispute,
@@ -113,25 +116,67 @@ const markOrderAsPaid = async ({
   if (order.paymentStatus === 'Remboursé') return null;
   if (order.paymentStatus === 'Payé') return order;
 
-  order.paymentStatus = 'Payé';
-  order.paidAt = new Date();
-
-  if (validIntent) order.paymentMethod = 'card';
+  const paidAt = new Date();
+  const set = { paymentStatus: 'Payé', paidAt };
+  if (validIntent) set.paymentMethod = 'card';
   if (validSession) {
-    order.paymentMethod = 'stripe_checkout';
+    set.paymentMethod = 'stripe_checkout';
     if (typeof checkoutSession.payment_intent === 'string') {
-      order.stripePaymentIntentId = checkoutSession.payment_intent;
+      set.stripePaymentIntentId = checkoutSession.payment_intent;
     }
   }
 
-  if (order.status === 'En attente') {
-    order.status = 'Confirmée';
+  // Prise de verrou atomique : seule l'exécution qui fait passer la commande à « Payé »
+  // l'annonce (webhook et /confirm peuvent arriver en même temps).
+  const claimed = await Order.findOneAndUpdate(
+    { _id: order._id, paymentStatus: { $nin: ['Payé', 'Remboursé'] } },
+    { $set: set },
+    { new: true }
+  );
+
+  if (!claimed) {
+    // Une autre exécution a gagné : réponse idempotente, sans nouvelle annonce.
+    const current = await Order.findById(orderId);
+    return current && current.paymentStatus === 'Payé' ? current : null;
   }
 
-  await order.save();
+  // Paiement arrivé après l'annulation : jamais de remise en « Confirmée », remboursement automatique.
+  if (claimed.status === 'Annulée') {
+    console.warn(`PAIEMENT TARDIF sur commande annulée ${claimed._id} : remboursement automatique.`);
+    const refund = await refundCancelledOrder(claimed, stripe);
+    if (!refund.refunded) {
+      console.error(`REMBOURSEMENT TARDIF NON EFFECTUÉ (${claimed._id}) : ${refund.reason}. Rapprochement manuel requis.`);
+    }
+    return claimed;
+  }
+
+  let announced = claimed;
+  if (claimed.status === 'En attente') {
+    // Transition conditionnelle : une annulation survenue entre-temps n'est pas écrasée.
+    const confirmed = await Order.findOneAndUpdate(
+      { _id: claimed._id, status: 'En attente' },
+      {
+        $set: { status: 'Confirmée' },
+        $push: { statusHistory: { status: 'Confirmée', updatedBy: null, updatedByRole: '', note: '', at: new Date() } },
+      },
+      { new: true }
+    );
+    if (confirmed) {
+      announced = confirmed;
+    } else {
+      const latest = await Order.findById(claimed._id);
+      if (latest?.status === 'Annulée') {
+        console.warn(`PAIEMENT TARDIF sur commande annulée ${latest._id} : remboursement automatique.`);
+        await refundCancelledOrder(latest, stripe);
+        return latest;
+      }
+      announced = latest || claimed;
+    }
+  }
+
   // Nouvelle commande payée : alerte du restaurant et des livreurs proches (erreurs journalisées, jamais bloquantes).
-  await require('../utils/courierDispatch').announcePaidOrder(order).catch(() => {});
-  return order;
+  await require('../utils/courierDispatch').announcePaidOrder(announced).catch(() => {});
+  return announced;
 };
 
 const getAuthorizedOrder = async (orderId, req) => {
@@ -602,6 +647,20 @@ const handleWebhook = async (req, res) => {
     });
   }
 
+  // Idempotence : un événement déjà reçu (même event.id) est acquitté sans rejouer ses effets.
+  let claimedEvent = false;
+  if (event?.id) {
+    try {
+      if ((await claimEvent(StripeEvent, event)) === 'duplicate') {
+        return res.status(200).json({ received: true, duplicate: true });
+      }
+      claimedEvent = true;
+    } catch (error) {
+      console.error('WEBHOOK EVENT LOG ERROR =>', error?.message);
+      return res.status(500).json({ received: false, code: 'WEBHOOK_PROCESSING_FAILED' });
+    }
+  }
+
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
@@ -659,6 +718,70 @@ const handleWebhook = async (req, res) => {
           console.log(`❌ Paiement échoué webhook: commande ${orderId}`);
         }
 
+        break;
+      }
+
+      case 'payment_intent.canceled': {
+        const paymentIntent = event.data.object;
+        const orderId = paymentIntent.metadata?.orderId;
+
+        if (orderId && isValidObjectId(orderId)) {
+          // Jamais de rétrogradation d'une commande déjà payée ou remboursée.
+          await Order.findOneAndUpdate(
+            {
+              _id: orderId,
+              stripePaymentIntentId: paymentIntent.id,
+              paymentStatus: { $nin: ['Payé', 'Remboursé'] },
+            },
+            {
+              paymentStatus: 'Non payé',
+              lastPaymentError: `Paiement Stripe annulé${paymentIntent.cancellation_reason ? ` (${paymentIntent.cancellation_reason})` : ''}`.slice(0, 300),
+            }
+          );
+        }
+
+        break;
+      }
+
+      case 'refund.updated':
+      case 'refund.failed': {
+        const refund = event.data.object;
+        const paymentIntentId = typeof refund.payment_intent === 'string'
+          ? refund.payment_intent
+          : refund.payment_intent?.id;
+
+        if (paymentIntentId) {
+          const order = await Order.findOne({ stripePaymentIntentId: paymentIntentId });
+          if (order) {
+            if (refund.status === 'failed' || refund.status === 'canceled' || event.type === 'refund.failed') {
+              // Remboursement en échec : conservé pour réconciliation (administration), jamais « Remboursé ».
+              if (order.paymentStatus !== 'Remboursé') {
+                order.stripeRefundId = refund.id || order.stripeRefundId;
+                order.refundError = `Remboursement Stripe en échec (${refund.failure_reason || refund.status || 'failed'}) : rapprochement requis.`.slice(0, 300);
+                await order.save();
+                console.error(`REMBOURSEMENT STRIPE EN ÉCHEC : commande ${order._id}, refund ${refund.id}.`);
+              }
+            } else if (refund.status === 'succeeded' && order.paymentStatus === 'Payé') {
+              applyRefundResult(order, refund);
+              await order.save();
+            }
+          }
+        }
+
+        break;
+      }
+
+      case 'charge.dispute.updated': {
+        const dispute = event.data.object;
+        const paymentIntentId = typeof dispute.payment_intent === 'string'
+          ? dispute.payment_intent
+          : dispute.payment_intent?.id;
+        // Un litige déjà clos est traité par charge.dispute.closed : une mise à jour tardive ne le rouvre pas.
+        const isClosed = ['won', 'lost', 'warning_closed'].includes(dispute.status);
+        if (paymentIntentId && !isClosed) {
+          await flagOrderDispute(paymentIntentId, dispute.id);
+        }
+        console.warn('Litige Stripe mis à jour :', { disputeId: dispute.id, status: dispute.status });
         break;
       }
 
@@ -768,12 +891,15 @@ const handleWebhook = async (req, res) => {
       default:
         break;
     }
+    if (claimedEvent) await completeEvent(StripeEvent, event).catch((e) => console.error('WEBHOOK EVENT LOG COMPLETE ERROR =>', e?.message));
   } catch (error) {
     console.error('WEBHOOK PROCESSING ERROR =>', {
       type: error?.type,
       code: error?.code,
       message: error?.message,
     });
+    // Libère l'enregistrement pour que Stripe puisse rejouer l'événement.
+    if (claimedEvent) await releaseEvent(StripeEvent, event).catch((e) => console.error('WEBHOOK EVENT LOG RELEASE ERROR =>', e?.message));
     // Return 5xx for transient processing failures so Stripe can retry.
     return res.status(500).json({
       received: false,
@@ -974,6 +1100,7 @@ const refundPayment = async (req, res) => {
 };
 
 module.exports = {
+  markOrderAsPaid,
   getAvailablePaymentMethods,
   createPaymentIntent,
   createCheckoutSession,

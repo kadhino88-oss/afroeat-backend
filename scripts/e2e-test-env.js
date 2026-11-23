@@ -116,14 +116,16 @@ const main = async () => {
     let response;
     let json;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-      response = await fetch(API.replace(/\/api$/, '/health'));
+      response = await fetch(API.replace(/\/api$/, '/health'), {
+        headers: process.env.HEALTH_DETAILS_TOKEN ? { 'x-health-token': process.env.HEALTH_DETAILS_TOKEN } : {},
+      });
       json = await response.json().catch(() => ({}));
       if (response.status === 200) break;
       if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 4000));
     }
     expect(response.status === 200, `santé ${response.status}`);
     expect(json?.database?.connected === true, 'base non connectée');
-    expect(json?.database?.name === 'afroeat_test', `mauvaise base : ${json?.database?.name}`);
+    expect(json?.database?.name === 'afroeat_test', `mauvaise base : ${json?.database?.name || 'inconnue (définis HEALTH_DETAILS_TOKEN, identique à celui du serveur)'}`);
     expect(json?.features?.stripe === true, 'Stripe inactif');
     return `base ${json.database.name}`;
   });

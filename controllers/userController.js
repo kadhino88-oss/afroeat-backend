@@ -143,61 +143,6 @@ const generateToken = (user) => {
   );
 };
 
-const protect = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        success: false,
-        message: 'Non autorisé, token manquant',
-      });
-    }
-
-    const token = authHeader.split(' ')[1];
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'Token manquant',
-      });
-    }
-
-    const decoded = jwt.verify(token, getJwtSecret());
-
-    if (!decoded?.id) {
-      return res.status(401).json({
-        success: false,
-        message: 'Token invalide',
-      });
-    }
-
-    const user = await User.findById(decoded.id).select('-password');
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Utilisateur introuvable ou non autorisé',
-      });
-    }
-
-    if (user.accountStatus === 'suspended') {
-      return res.status(403).json({
-        success: false,
-        message: 'Compte suspendu',
-      });
-    }
-
-    req.user = user;
-    return next();
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: 'Token invalide ou expiré',
-    });
-  }
-};
-
 const validateRegistrationPayload = (body) => {
   const name = normalizeString(body?.name);
   const email = normalizeEmail(body?.email);
@@ -472,11 +417,15 @@ const loginUser = async (req, res) => {
 
     const token = generateToken(user);
 
+    // Administrateur sans 2FA : on ne bloque pas (risque de verrouillage), on signale seulement.
+    const adminWithout2FA = user.role === 'admin' && !user.twoFactor?.enabled;
+
     return res.status(200).json({
       success: true,
       message: 'Connexion réussie',
       token,
       user: formatUser(user),
+      ...(adminWithout2FA ? { twoFactorRequired: true, mustEnableTwoFactor: true } : {}),
     });
   } catch (error) {
     return res.status(500).json({
@@ -790,7 +739,6 @@ module.exports = {
   resetPassword,
   updateMe,
   getDrivers,
-  protect,
   generateToken,
   formatUser,
 };

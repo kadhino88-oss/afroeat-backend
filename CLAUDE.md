@@ -14,7 +14,7 @@ API Node.js / Express 5 / MongoDB (Mongoose 9) d'une marketplace de livraison de
 - **Jamais** de secret dans le code ou les logs (JWT, Stripe, Mongo). Documenter les variables dans `.env.example` uniquement.
 - Toute route est authentifiée + contrôle de rôle **et** de propriété de la ressource (pas d'IDOR).
 - Les prix, frais et disponibilités viennent **toujours** de la base, jamais du client.
-- Paiements: webhook Stripe sur payload brut signé; opérations idempotentes; ne pas activer la prod (paiement carte, cash, Connect) sans ledger/réconciliation — voir README « Production launch checklist ».
+- Paiements: webhook Stripe sur payload brut signé; opérations idempotentes; la prod est verrouillée (`utils/runtimeEnvironment.js`) mais le verrou ne vérifie que la présence de variables, pas un ledger: ne pas l'ouvrir avant d'avoir fermé les lacunes P0 du README (« Known gaps before production »).
 - Entrées validées/typées; aucune requête Mongo construite depuis un objet client brut.
 - Toute nouvelle route/comportement = un test `node --test`. La CI doit rester verte.
 - Performance: pagination obligatoire sur les listes, `.lean()` en lecture, index pour chaque filtre/tri fréquent, pas de N+1.

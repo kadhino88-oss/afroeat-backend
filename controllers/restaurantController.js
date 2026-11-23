@@ -7,6 +7,7 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 const MenuItem = require('../models/MenuItem');
 const { isRevenueRecognizedOrder } = require('../utils/revenueRecognition');
+const { toPublicRestaurant } = require('../utils/publicRestaurant');
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -91,9 +92,9 @@ const hasSchemaPath = (schema, path) => {
   try { return Boolean(schema?.path(path)); } catch { return false; }
 };
 
-const populateRestaurantQuery = (query) => {
+const populateRestaurantQuery = (query, { includeOwner = true } = {}) => {
   if (!query) return query;
-  if (hasSchemaPath(Restaurant.schema, 'owner')) {
+  if (includeOwner && hasSchemaPath(Restaurant.schema, 'owner')) {
     query.populate('owner', 'name email role phone accountStatus isIdentityVerified isWorkAuthorized');
   }
   if (hasSchemaPath(Restaurant.schema, 'menu'))  query.populate('menu');
@@ -101,7 +102,7 @@ const populateRestaurantQuery = (query) => {
   return query;
 };
 
-const buildRestaurantFilters = (query = {}) => {
+const buildRestaurantFilters = (query = {}, { publicView = false } = {}) => {
   const filters = {};
   const search  = normalizeText(query.search);
   const cuisine = normalizeText(query.cuisine);
@@ -124,12 +125,17 @@ const buildRestaurantFilters = (query = {}) => {
   if (cuisine) filters.cuisine = new RegExp(`^${escapeRegex(cuisine)}$`, 'i');
   if (city)    filters.city    = new RegExp(`^${escapeRegex(city)}$`, 'i');
   if (country) filters.country = new RegExp(`^${escapeRegex(country)}$`, 'i');
-  if (ownerId) {
+  if (ownerId && !publicView) {
     if (!isValidObjectId(ownerId)) throw new Error('ownerId invalide.');
     filters.owner = ownerId;
   }
   if (query.isOpen   !== undefined) filters.isOpen   = normalizeBoolean(query.isOpen,   false);
-  if (query.isActive !== undefined) filters.isActive  = normalizeBoolean(query.isActive, true);
+  if (publicView) {
+    // Catalogue public : jamais de commerce désactivé, quel que soit le paramètre.
+    filters.isActive = true;
+  } else if (query.isActive !== undefined) {
+    filters.isActive = normalizeBoolean(query.isActive, true);
+  }
   return filters;
 };
 
@@ -157,42 +163,6 @@ const batchLoadMenuItems = async (restaurantIds) => {
     }, {});
   } catch (error) {
     console.error('BATCH LOAD MENU ITEMS ERROR =>', error);
-    return {};
-  }
-};
-
-const batchLoadOrderStats = async (restaurantIds) => {
-  if (!restaurantIds || restaurantIds.length === 0) return {};
-  const emptyStats = {
-    totalOrders: 0, pendingOrders: 0, confirmedOrders: 0,
-    preparingOrders: 0, deliveringOrders: 0, deliveredOrders: 0,
-    cancelledOrders: 0, revenue: 0,
-  };
-  try {
-    const orders = await Order.find({ restaurant: { $in: restaurantIds } })
-      .select('restaurant status totalPrice total totalAmount paymentStatus')
-      .lean();
-
-    return orders.reduce((acc, order) => {
-      const rid    = String(order.restaurant);
-      const status = normalizeText(order?.status).toLowerCase();
-      const total  = normalizeNumber(order?.totalPrice ?? order?.total ?? order?.totalAmount, 0);
-
-      if (!acc[rid]) acc[rid] = { ...emptyStats };
-      acc[rid].totalOrders += 1;
-      if (status.includes('pending') || status.includes('attente')) acc[rid].pendingOrders += 1;
-      if (status.includes('confirm'))                                acc[rid].confirmedOrders += 1;
-      if (status.includes('prepar'))                                 acc[rid].preparingOrders += 1;
-      if (status.includes('livraison') || status.includes('route') || status.includes('delivery')) acc[rid].deliveringOrders += 1;
-      if (status.includes('livrée') || status.includes('livree') || status.includes('delivered'))  acc[rid].deliveredOrders += 1;
-      if (status.includes('annul') || status.includes('cancel'))    acc[rid].cancelledOrders += 1;
-      if (isRevenueRecognizedOrder(order)) {
-        acc[rid].revenue += total;
-      }
-      return acc;
-    }, {});
-  } catch (error) {
-    console.error('BATCH LOAD ORDER STATS ERROR =>', error);
     return {};
   }
 };
@@ -363,7 +333,7 @@ const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
   return payload;
 };
 
-const buildUpdatePayload = async (reqBody = {}) => {
+const buildUpdatePayload = async (reqBody = {}, reqUser = null) => {
   const payload = {};
   if (reqBody.name        !== undefined) payload.name        = normalizeText(reqBody.name);
   if (reqBody.businessType !== undefined) payload.businessType = normalizeBusinessType(reqBody.businessType);
@@ -403,7 +373,8 @@ const buildUpdatePayload = async (reqBody = {}) => {
   if (reqBody.latitude    !== undefined) payload.latitude    = normalizeNumber(reqBody.latitude,  NaN);
   if (reqBody.longitude   !== undefined) payload.longitude   = normalizeNumber(reqBody.longitude, NaN);
 
-  if (reqBody.owner !== undefined) {
+  // Seul un admin peut transférer la propriété ; pour un compte restaurant, `owner` est ignoré.
+  if (reqBody.owner !== undefined && reqUser?.role === 'admin') {
     const ownerId = normalizeText(reqBody.owner);
     if (!ownerId || !isValidObjectId(ownerId)) throw new Error('Propriétaire invalide.');
     const owner = await User.findById(ownerId).select('_id role');
@@ -432,21 +403,19 @@ const getRestaurants = async (req, res) => {
     const page    = normalizePage(req.query.page);
     const limit   = normalizeLimit(req.query.limit);
     const sort    = normalizeSort(req.query.sort);
-    const filters = buildRestaurantFilters(req.query);
+    const filters = buildRestaurantFilters(req.query, { publicView: true });
 
     const [total, restaurants] = await Promise.all([
       Restaurant.countDocuments(filters),
       populateRestaurantQuery(
-        Restaurant.find(filters).sort(buildSort(sort)).skip((page - 1) * limit).limit(limit)
+        Restaurant.find(filters).sort(buildSort(sort)).skip((page - 1) * limit).limit(limit),
+        { includeOwner: false }
       ),
     ]);
 
-    // ✅ OPTIMISÉ — 2 requêtes batch au lieu de N×2 requêtes individuelles
+    // Route publique : un seul chargement batch (menus), aucune statistique de commandes.
     const restaurantIds = restaurants.map((r) => r._id);
-    const [menuMap, statsMap] = await Promise.all([
-      batchLoadMenuItems(restaurantIds),
-      batchLoadOrderStats(restaurantIds),
-    ]);
+    const menuMap = await batchLoadMenuItems(restaurantIds);
 
     const items = restaurants.map((restaurantDoc) => {
       const restaurant = typeof restaurantDoc.toObject === 'function'
@@ -460,7 +429,7 @@ const getRestaurants = async (req, res) => {
       else if (Array.isArray(restaurant?.menus) && restaurant.menus.length > 0) menus = restaurant.menus;
       else menus = menuMap[rid] || [];
 
-      return enrichRestaurantWithData(restaurant, menus, statsMap[rid]);
+      return toPublicRestaurant(restaurant, menus);
     }).filter(Boolean);
 
     const pagination = buildPaginationMeta({ total, page, limit });
@@ -481,11 +450,9 @@ const getRestaurants = async (req, res) => {
         cuisine:  normalizeText(req.query.cuisine),
         city:     normalizeText(req.query.city),
         country:  normalizeText(req.query.country),
-        ownerId:  normalizeText(req.query.ownerId),
         businessType: normalizeText(req.query.businessType),
         sort,
         isOpen:   req.query.isOpen,
-        isActive: req.query.isActive,
       },
     });
   } catch (error) {
@@ -548,10 +515,9 @@ const getNearbyRestaurants = async (req, res) => {
       });
     }
 
-    const filters = buildRestaurantFilters(req.query);
-    if (filters.isActive === undefined) filters.isActive = true;
+    const filters = buildRestaurantFilters(req.query, { publicView: true });
 
-    const restaurants = await populateRestaurantQuery(Restaurant.find(filters));
+    const restaurants = await populateRestaurantQuery(Restaurant.find(filters), { includeOwner: false });
 
     const withDistance = restaurants
       .map((restaurantDoc) => {
@@ -572,10 +538,7 @@ const getNearbyRestaurants = async (req, res) => {
       .sort((a, b) => a.distance - b.distance);
 
     const restaurantIds = withDistance.map((entry) => entry.restaurant._id);
-    const [menuMap, statsMap] = await Promise.all([
-      batchLoadMenuItems(restaurantIds),
-      batchLoadOrderStats(restaurantIds),
-    ]);
+    const menuMap = await batchLoadMenuItems(restaurantIds);
 
     const items = withDistance
       .map(({ restaurant, distance }) => {
@@ -593,14 +556,7 @@ const getNearbyRestaurants = async (req, res) => {
           menus = menuMap[rid] || [];
         }
 
-        const enriched = enrichRestaurantWithData(
-          restaurant,
-          menus,
-          statsMap[rid]
-        );
-        if (!enriched) return null;
-
-        return { ...enriched, distanceKm: Number(distance.toFixed(2)) };
+        return toPublicRestaurant(restaurant, menus, { distanceKm: Number(distance.toFixed(2)) });
       })
       .filter(Boolean);
 
@@ -646,12 +602,15 @@ const getRestaurantById = async (req, res) => {
     if (!isValidObjectId(id)) {
       return res.status(400).json({ success: false, message: 'ID restaurant invalide.' });
     }
-    const restaurant = await populateRestaurantQuery(Restaurant.findById(id));
-    if (!restaurant) {
+    const restaurant = await populateRestaurantQuery(Restaurant.findById(id), { includeOwner: false });
+    if (!restaurant || restaurant.isActive === false) {
       return res.status(404).json({ success: false, message: 'Restaurant introuvable.' });
     }
-    const enrichedRestaurant = await enrichRestaurant(restaurant);
-    return res.status(200).json({ success: true, restaurant: enrichedRestaurant });
+    const raw = typeof restaurant.toObject === 'function' ? restaurant.toObject() : restaurant;
+    const embedded = Array.isArray(raw.menu) && raw.menu.length ? raw.menu
+      : Array.isArray(raw.menus) && raw.menus.length ? raw.menus : null;
+    const menus = embedded || await getMenuDocumentsForRestaurant(String(raw._id));
+    return res.status(200).json({ success: true, restaurant: toPublicRestaurant(raw, menus) });
   } catch (error) {
     console.error('GET RESTAURANT BY ID ERROR =>', error);
     return res.status(500).json({ success: false, message: error.message || 'Impossible de charger ce restaurant.' });
@@ -684,7 +643,7 @@ const updateRestaurant = async (req, res) => {
     if (!canManageRestaurant(req, existingRestaurant)) {
       return res.status(403).json({ success: false, message: "Vous n'avez pas accès à ce restaurant." });
     }
-    const payload          = await buildUpdatePayload(req.body);
+    const payload          = await buildUpdatePayload(req.body, req.user);
 
     // « Placer mon restaurant à son adresse » : le serveur cherche la position de l'adresse.
     if (req.body?.locateFromAddress === true) {
@@ -740,6 +699,7 @@ const deleteRestaurant = async (req, res) => {
 };
 
 module.exports = {
+  buildUpdatePayload,
   getNearbyRestaurants,
   getRestaurants,
   getMyRestaurant,
