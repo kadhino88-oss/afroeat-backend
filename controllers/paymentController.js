@@ -9,6 +9,7 @@ const {
   isMatchingCheckoutSession,
 } = require('../utils/paymentValidation');
 const { isFullyRefundedCharge } = require('../utils/refundGuards');
+const { refundCancelledOrder } = require('../utils/orderRefund');
 const {
   reverseOrderTransfers,
   flagOrderDispute,
@@ -113,25 +114,67 @@ const markOrderAsPaid = async ({
   if (order.paymentStatus === 'Remboursé') return null;
   if (order.paymentStatus === 'Payé') return order;
 
-  order.paymentStatus = 'Payé';
-  order.paidAt = new Date();
-
-  if (validIntent) order.paymentMethod = 'card';
+  const paidAt = new Date();
+  const set = { paymentStatus: 'Payé', paidAt };
+  if (validIntent) set.paymentMethod = 'card';
   if (validSession) {
-    order.paymentMethod = 'stripe_checkout';
+    set.paymentMethod = 'stripe_checkout';
     if (typeof checkoutSession.payment_intent === 'string') {
-      order.stripePaymentIntentId = checkoutSession.payment_intent;
+      set.stripePaymentIntentId = checkoutSession.payment_intent;
     }
   }
 
-  if (order.status === 'En attente') {
-    order.status = 'Confirmée';
+  // Prise de verrou atomique : seule l'exécution qui fait passer la commande à « Payé »
+  // l'annonce (webhook et /confirm peuvent arriver en même temps).
+  const claimed = await Order.findOneAndUpdate(
+    { _id: order._id, paymentStatus: { $nin: ['Payé', 'Remboursé'] } },
+    { $set: set },
+    { new: true }
+  );
+
+  if (!claimed) {
+    // Une autre exécution a gagné : réponse idempotente, sans nouvelle annonce.
+    const current = await Order.findById(orderId);
+    return current && current.paymentStatus === 'Payé' ? current : null;
   }
 
-  await order.save();
+  // Paiement arrivé après l'annulation : jamais de remise en « Confirmée », remboursement automatique.
+  if (claimed.status === 'Annulée') {
+    console.warn(`PAIEMENT TARDIF sur commande annulée ${claimed._id} : remboursement automatique.`);
+    const refund = await refundCancelledOrder(claimed, stripe);
+    if (!refund.refunded) {
+      console.error(`REMBOURSEMENT TARDIF NON EFFECTUÉ (${claimed._id}) : ${refund.reason}. Rapprochement manuel requis.`);
+    }
+    return claimed;
+  }
+
+  let announced = claimed;
+  if (claimed.status === 'En attente') {
+    // Transition conditionnelle : une annulation survenue entre-temps n'est pas écrasée.
+    const confirmed = await Order.findOneAndUpdate(
+      { _id: claimed._id, status: 'En attente' },
+      {
+        $set: { status: 'Confirmée' },
+        $push: { statusHistory: { status: 'Confirmée', updatedBy: null, updatedByRole: '', note: '', at: new Date() } },
+      },
+      { new: true }
+    );
+    if (confirmed) {
+      announced = confirmed;
+    } else {
+      const latest = await Order.findById(claimed._id);
+      if (latest?.status === 'Annulée') {
+        console.warn(`PAIEMENT TARDIF sur commande annulée ${latest._id} : remboursement automatique.`);
+        await refundCancelledOrder(latest, stripe);
+        return latest;
+      }
+      announced = latest || claimed;
+    }
+  }
+
   // Nouvelle commande payée : alerte du restaurant et des livreurs proches (erreurs journalisées, jamais bloquantes).
-  await require('../utils/courierDispatch').announcePaidOrder(order).catch(() => {});
-  return order;
+  await require('../utils/courierDispatch').announcePaidOrder(announced).catch(() => {});
+  return announced;
 };
 
 const getAuthorizedOrder = async (orderId, req) => {
@@ -974,6 +1017,7 @@ const refundPayment = async (req, res) => {
 };
 
 module.exports = {
+  markOrderAsPaid,
   getAvailablePaymentMethods,
   createPaymentIntent,
   createCheckoutSession,
