@@ -1,5 +1,6 @@
 'use strict';
 
+const { isValidEmailAddress } = require('./emailValidation');
 const TYPES = ['restaurant', 'grocery', 'shop', 'drinks', 'other', 'courier'];
 const STATUSES = ['new', 'contacted', 'approved', 'rejected'];
 
@@ -25,7 +26,7 @@ const validateApplication = (body = {}) => {
   if (data.businessName.length < 2) throw new Error('Le nom du commerce est obligatoire.');
   if (!TYPES.includes(data.businessType)) throw new Error('Le type de commerce est invalide.');
   if (data.contactName.length < 2) throw new Error('Le nom du contact est obligatoire.');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(data.email)) throw new Error("L'adresse email est invalide.");
+  if (!isValidEmailAddress(data.email, { minLastLabel: 2 })) throw new Error("L'adresse email est invalide.");
   if (data.phone.replace(/\D/g, '').length < 7 || !/^[+\d\s().-]+$/.test(data.phone)) {
     throw new Error('Le numéro de téléphone est invalide.');
   }

@@ -1,3 +1,4 @@
+const { isValidEmailAddress } = require('../utils/emailValidation');
 const jwt = require('jsonwebtoken');
 const { sendMail } = require('../utils/mailer');
 const { generateResetToken, hashResetToken, isValidResetToken, resetLink, resetEmail } = require('../utils/passwordReset');
@@ -67,9 +68,7 @@ const escapeRegex = (value) => {
   return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
-const isValidEmail = (email) => {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-};
+const isValidEmail = (email) => isValidEmailAddress(email);
 
 const isStrongPassword = (password) => {
   const value = String(password || '');
