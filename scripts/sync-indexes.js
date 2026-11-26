@@ -9,6 +9,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
+const { syncModelIndexes } = require('../utils/syncModelIndexes');
 
 const args = new Set(process.argv.slice(2));
 const soft = args.has('--soft');
@@ -28,6 +29,7 @@ const run = async () => {
     .filter((file) => file.endsWith('.js'))
     .forEach((file) => require(path.join(modelsDir, file)));
 
+  const failures = [];
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 });
   console.log(`Base : ${mongoose.connection.name}`);
 
@@ -37,12 +39,23 @@ const run = async () => {
       const dropped = await model.syncIndexes();
       console.log(`✅ ${name}: index synchronisés${dropped.length ? ` (supprimés: ${dropped.join(', ')})` : ''}`);
     } else {
-      await model.createIndexes();
-      console.log(`✅ ${name}: index créés ou déjà présents`);
+      const result = await syncModelIndexes(model);
+      if (result.ok) {
+        console.log(`✅ ${name}: index créés ou déjà présents`);
+      } else {
+        failures.push(name);
+        for (const item of result.failed) {
+          console.error(`⚠️ ${name}: index ${item.key} non créé => ${item.message}`);
+        }
+        console.log(`⚠️ ${name}: index créés sauf ${result.failed.length} en conflit (voir ci-dessus)`);
+      }
     }
   }
 
   await mongoose.disconnect();
+  if (failures.length) {
+    throw new Error(`Index en conflit pour : ${failures.join(', ')}`);
+  }
 };
 
 run().catch(async (error) => {
