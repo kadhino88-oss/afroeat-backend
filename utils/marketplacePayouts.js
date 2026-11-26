@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const { isMatchingPaymentIntent } = require('./paymentValidation');
 const { isRealProduction } = require('./runtimeEnvironment');
+const { toMinorUnits } = require('./currency');
 
 const isConnectPayoutsEnabled = () => {
   if (
@@ -51,12 +52,9 @@ const getStripe = () => {
   return require('stripe')(secretKey);
 };
 
+// Montant de versement : strictement positif et entier sûr (sinon null).
 const toStripeAmount = (amount, currency) => {
-  const code = String(currency || '').trim().toUpperCase();
-  const value = Number(amount);
-  if (!Number.isFinite(value) || value <= 0) return null;
-  if (!['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'XOF', 'XAF'].includes(code)) return null;
-  const minorUnits = Math.round(value * (code === 'XOF' || code === 'XAF' ? 1 : 100));
+  const minorUnits = toMinorUnits(amount, currency);
   return Number.isSafeInteger(minorUnits) && minorUnits > 0 ? minorUnits : null;
 };
 

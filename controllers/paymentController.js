@@ -9,6 +9,7 @@ const {
   isMatchingCheckoutSession,
 } = require('../utils/paymentValidation');
 const { isFullyRefundedCharge } = require('../utils/refundGuards');
+const { toMinorUnits, fromMinorUnits, getMinAmount } = require('../utils/currency');
 const { refundCancelledOrder, applyRefundResult } = require('../utils/orderRefund');
 const StripeEvent = require('../models/StripeEvent');
 const { claimEvent, completeEvent, releaseEvent } = require('../utils/stripeEventLog');
@@ -41,25 +42,7 @@ const normalizeNumber = (value, fallback = 0) => {
 
 const roundMoney = (value) => Number(normalizeNumber(value, 0).toFixed(2));
 
-const CURRENCY_CONFIG = {
-  EUR: { multiplier: 100, minAmount: 0.5 },
-  USD: { multiplier: 100, minAmount: 0.5 },
-  GBP: { multiplier: 100, minAmount: 0.3 },
-  CHF: { multiplier: 100, minAmount: 0.5 },
-  CAD: { multiplier: 100, minAmount: 0.5 },
-  XOF: { multiplier: 1, minAmount: 100 },
-  XAF: { multiplier: 1, minAmount: 100 },
-};
-
-const toStripeAmount = (amount, currency) => {
-  const config = CURRENCY_CONFIG[String(currency).toUpperCase()];
-  return config ? Math.round(amount * config.multiplier) : null;
-};
-
-const getMinAmount = (currency) => {
-  const config = CURRENCY_CONFIG[String(currency).toUpperCase()];
-  return config ? config.minAmount : null;
-};
+const toStripeAmount = toMinorUnits;
 
 const hasStripeTestSecret = () =>
   /^(sk|rk)_test_/.test(String(process.env.STRIPE_SECRET_KEY || ''));
@@ -817,13 +800,7 @@ const handleWebhook = async (req, res) => {
           if (order) {
             const fullyRefunded = isFullyRefundedCharge(charge);
             const refundCurrency = String(charge.currency || order.currency || 'EUR').toUpperCase();
-            const refundMultiplier = ['XOF', 'XAF'].includes(refundCurrency)
-              ? 1
-              : (CURRENCY_CONFIG[refundCurrency]?.multiplier || 100);
-
-            order.stripeAmountRefunded = roundMoney(
-              Number(charge.amount_refunded || 0) / refundMultiplier
-            );
+            order.stripeAmountRefunded = fromMinorUnits(charge.amount_refunded || 0, refundCurrency) ?? 0;
             if (fullyRefunded) {
               order.paymentStatus = 'Remboursé';
               order.refundedAt = new Date();
