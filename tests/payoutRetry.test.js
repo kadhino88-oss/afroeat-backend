@@ -152,11 +152,14 @@ test('endpoint : secret non configuré -> 403, secret incorrect -> 401, aucun ac
   assert.equal(transferCalls.length, 0);
 });
 
-test('route POST /connect/retry-payouts : montée, sans session utilisateur, un seul gestionnaire', () => {
+test('route POST /connect/retry-payouts : montée, limiteur de débit puis gestionnaire, sans session utilisateur', () => {
   const layer = router.stack.find((l) => l.route?.path === '/connect/retry-payouts');
   assert.ok(layer, 'route absente');
   assert.equal(layer.route.methods.post, true);
-  assert.equal(layer.route.stack.length, 1);
+  // limiteur de débit déclaré sur la route + gestionnaire cron ; ni `protect` ni contrôle de rôle (authentification par CRON_SECRET)
+  assert.equal(layer.route.stack.length, 2);
+  const names = layer.route.stack.map((l) => l.handle.name);
+  assert.ok(!names.includes('protect'), 'la route cron ne doit pas exiger de session');
 });
 
 test('endpoint : relance les versements et ne renvoie que des compteurs', async () => {
