@@ -20,6 +20,7 @@ const {
   reconcileOrderPayout,
 } = require('../utils/marketplacePayouts');
 const { handleConnectedAccountUpdated } = require('./connectController');
+const ledger = require('../utils/ledger');
 const { evaluatePaymentChannel } = require('../utils/paymentChannel');
 const { getOrderPaymentCreationBlock } = require('../utils/orderPaymentGuard');
 const {
@@ -72,7 +73,7 @@ const getOrderAmount = (order) => {
   return roundMoney(order?.totalPrice || 0);
 };
 
-const markOrderAsPaid = async ({
+const markOrderAsPaidCore = async ({
   orderId,
   paymentIntent = null,
   checkoutSession = null,
@@ -161,6 +162,34 @@ const markOrderAsPaid = async ({
   // Nouvelle commande payée : alerte du restaurant et des livreurs proches (erreurs journalisées, jamais bloquantes).
   await require('../utils/courierDispatch').announcePaidOrder(announced).catch(() => {});
   return announced;
+};
+
+const RECENT_PAYMENT_MS = 10 * 60 * 1000;
+
+// Ledger : écriture idempotente de la charge puis, best-effort, des frais Stripe. À échec ouvert : aucune
+// exception, jamais de changement du résultat du paiement (voir utils/ledger.js).
+const recordPaymentInLedger = async (order, { paymentIntent, checkoutSession }) => {
+  try {
+    if (!order || !['Payé', 'Remboursé'].includes(order.paymentStatus)) return;
+    const paymentIntentId = paymentIntent?.id
+      || (typeof checkoutSession?.payment_intent === 'string' ? checkoutSession.payment_intent : null)
+      || order.stripePaymentIntentId
+      || null;
+    await ledger.recordCharge(order, { paymentIntentId });
+    // Frais : seulement juste après le paiement (pas à chaque rejeu), sans jamais bloquer.
+    const paidAt = order.paidAt ? new Date(order.paidAt).getTime() : 0;
+    if (Date.now() - paidAt < RECENT_PAYMENT_MS) {
+      await ledger.recordStripeFee(order, { stripe, paymentIntent, paymentIntentId });
+    }
+  } catch (error) {
+    console.error('LEDGER ERROR =>', { stage: 'payment', name: error?.name, code: error?.code });
+  }
+};
+
+const markOrderAsPaid = async (args) => {
+  const order = await markOrderAsPaidCore(args);
+  await recordPaymentInLedger(order, args || {});
+  return order;
 };
 
 const getAuthorizedOrder = async (orderId, req) => {
@@ -606,6 +635,20 @@ const confirmPayment = async (req, res) => {
   }
 };
 
+// Remboursements d'une charge pour le ledger : ceux déjà présents dans l'événement, sinon une lecture Stripe
+// bornée dans le temps. Best-effort : indisponible = liste vide (le rapprochement signalera l'écart).
+const collectChargeRefunds = async (charge) => {
+  try {
+    if (Array.isArray(charge?.refunds?.data) && charge.refunds.data.length) return charge.refunds.data;
+    if (!stripe || !charge?.id || typeof stripe.refunds?.list !== 'function') return [];
+    const list = await ledger.withTimeout(stripe.refunds.list({ charge: charge.id, limit: 100 }), 4000);
+    return Array.isArray(list?.data) ? list.data : [];
+  } catch (error) {
+    console.error('LEDGER ERROR =>', { stage: 'refund_lookup', name: error?.name, code: error?.code });
+    return [];
+  }
+};
+
 const handleWebhook = async (req, res) => {
   const signature = req.headers['stripe-signature'];
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -737,6 +780,8 @@ const handleWebhook = async (req, res) => {
         if (paymentIntentId) {
           const order = await Order.findOne({ stripePaymentIntentId: paymentIntentId });
           if (order) {
+            // Ledger (échec ouvert, idempotent par identifiant de remboursement Stripe).
+            if (refund.status === 'succeeded' && event.type !== 'refund.failed') await ledger.recordRefund(order, refund);
             if (refund.status === 'failed' || refund.status === 'canceled' || event.type === 'refund.failed') {
               // Remboursement en échec : conservé pour réconciliation (administration), jamais « Remboursé ».
               if (order.paymentStatus !== 'Remboursé') {
@@ -810,6 +855,9 @@ const handleWebhook = async (req, res) => {
             }
             await order.save();
 
+            // Ledger : un enregistrement par remboursement Stripe abouti (échec ouvert, idempotent).
+            await ledger.recordRefunds(order, await collectChargeRefunds(charge));
+
             // Full refunds reverse existing Connect transfers idempotently.
             // Partial refunds are flagged for review and cannot trigger payouts.
             await reverseOrderTransfers(order, charge);
@@ -854,6 +902,7 @@ const handleWebhook = async (req, res) => {
               // Litige perdu : réversion des transferts Connect déjà faits, ou annulation du versement.
               order.stripeDisputeLostAt = order.stripeDisputeLostAt || new Date();
               await order.save();
+              await ledger.recordDisputeLost(order, dispute);
               await handleLostDisputePayout(order);
               console.warn('Litige Stripe perdu traité :', { orderId: String(order._id), disputeId: dispute.id });
             } else {
@@ -1095,6 +1144,8 @@ const refundPayment = async (req, res) => {
       order.lastPaymentError = 'Stripe a refusé le remboursement : ' + String(refund.status);
     }
     await order.save();
+
+    if (refund.status === 'succeeded') await ledger.recordRefund(order, refund);
 
     if (refund.status === 'succeeded') {
       try {

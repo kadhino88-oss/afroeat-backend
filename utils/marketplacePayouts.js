@@ -6,6 +6,7 @@ const Restaurant = require('../models/Restaurant');
 const { isMatchingPaymentIntent } = require('./paymentValidation');
 const { isRealProduction } = require('./runtimeEnvironment');
 const { toMinorUnits } = require('./currency');
+const { recordTransfer, recordTransferReversal, unixToDate } = require('./ledger');
 
 const isConnectPayoutsEnabled = () => {
   if (
@@ -132,6 +133,8 @@ const createTransfer = async ({ order, stripe, owner, amount, kind, chargeId }) 
     { idempotencyKey: 'afroeat_' + kind + '_transfer_' + order._id.toString() }
   );
 
+  // Ledger avant la sauvegarde de la commande : le mouvement Stripe a eu lieu quoi qu'il arrive ensuite.
+  await recordTransfer(order, kind, transfer.id, { amountMinor, occurredAt: unixToDate(transfer.created) });
   order[field] = transfer.id;
   order.payoutUpdatedAt = new Date();
   await order.save();
@@ -197,6 +200,9 @@ const handleLostDisputePayout = async (order) => {
         },
         { idempotencyKey: 'afroeat_' + kind + '_reversal_' + order._id.toString() }
       );
+      await recordTransferReversal(order, kind, reversal.id, {
+        amountMinor: reversal.amount, occurredAt: unixToDate(reversal.created),
+      });
       order[reversalField] = reversal.id;
       order.payoutUpdatedAt = new Date();
       await order.save();
@@ -364,6 +370,9 @@ const reverseOrderTransfers = async (order, charge) => {
         { metadata: { orderId: order._id.toString(), payoutType: kind, platform: 'afroeat' } },
         { idempotencyKey: 'afroeat_' + kind + '_reversal_' + order._id.toString() }
       );
+      await recordTransferReversal(order, kind, reversal.id, {
+        amountMinor: reversal.amount, occurredAt: unixToDate(reversal.created),
+      });
       order[reversalField] = reversal.id;
       order.payoutUpdatedAt = new Date();
       await order.save();
