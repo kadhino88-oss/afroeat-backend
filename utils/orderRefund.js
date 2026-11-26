@@ -4,6 +4,7 @@
 // Le statut « Remboursé » est posé par le webhook Stripe (charge.refunded), pas ici.
 
 const { fromMinorUnits, toMinorUnits } = require('./currency');
+const { recordRefund } = require('./ledger');
 
 const shouldRefund = (order) =>
   Boolean(
@@ -78,6 +79,9 @@ const refundCancelledOrder = async (order, stripe) => {
     order.refundError = '';
     applyRefundResult(order, refund);
     await order.save();
+    // Ledger : écriture idempotente, à échec ouvert (ne lève jamais). Un remboursement « pending » est
+    // enregistré plus tard par le webhook refund.updated.
+    if (refund?.status === 'succeeded') await recordRefund(order, refund);
     return { refunded: true };
   } catch (error) {
     // L'échec est conservé pour l'administration (relance manuelle possible).

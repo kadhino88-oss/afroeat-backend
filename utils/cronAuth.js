@@ -12,9 +12,14 @@ const checkCronSecret = (req, env = process.env) => {
   const secret = String(env.CRON_SECRET || '').trim();
   if (!secret) return { ok: false, status: 403, code: 'CRON_DISABLED' };
 
-  const header = String(req?.headers?.authorization || '');
-  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
-  const provided = match ? match[1] : '';
+  // Analyse linéaire de « Bearer <jeton> » (pas de regex sur l'en-tête fourni par le client).
+  const header = String(req?.headers?.authorization || '').trim();
+  const space = header.indexOf(' ');
+  let provided = '';
+  if (space > 0 && header.slice(0, space).toLowerCase() === 'bearer') {
+    const candidate = header.slice(space + 1).trim();
+    provided = candidate.includes(' ') || candidate.includes('\t') ? '' : candidate;
+  }
   const valid = crypto.timingSafeEqual(digest(provided), digest(secret)) && provided.length > 0;
   return valid ? { ok: true } : { ok: false, status: 401, code: 'CRON_UNAUTHORIZED' };
 };

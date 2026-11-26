@@ -1,8 +1,10 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 
 const { protect } = require('../middleware/authMiddleware');
+const { allowRoles } = require('../middleware/roleMiddleware');
 const { requireAdminOrigin } = require('../utils/adminOrigin');
 const {
   getAdminDashboard,
@@ -130,6 +132,26 @@ router.get('/drivers', getAdminDrivers);
  */
 router.get('/cash-ledger', require('../controllers/cashLedgerController').listCashLedger);
 router.post('/cash-ledger/:kind/:id/settle', require('../controllers/cashLedgerController').settleCashLedger);
+
+/**
+ * Ledger comptable (lecture seule) : totaux par type et par devise sur une période [from, to).
+ * Limiteur, authentification et rôle déclarés sur la route elle-même (l'analyse de code ne voit pas ceux
+ * montés plus haut).
+ */
+const ledgerSummaryLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Trop de requêtes.' },
+});
+router.get(
+  '/ledger/summary',
+  ledgerSummaryLimiter,
+  protect,
+  allowRoles('admin'),
+  require('../controllers/ledgerController').getLedgerSummary
+);
 
 /**
  * Orders

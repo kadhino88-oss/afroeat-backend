@@ -21,6 +21,8 @@ const cronLimiter = rateLimit({
   message: { success: false, message: 'Trop de requêtes.' },
 });
 
+const { reconcileDailyCron } = require('../controllers/ledgerController');
+
 const {
   createPaymentIntent,
   createCheckoutSession,
@@ -107,6 +109,10 @@ router.post('/connect/reconciliation/:orderId/resolve', protect, allowRoles('adm
 // Relance par lot des versements en attente : appelée par un cron avec `Authorization: Bearer <CRON_SECRET>`
 // (pas de session). Passe par le même limiteur « paiement » que le reste de /api/payments.
 router.post('/connect/retry-payouts', cronLimiter, retryPayoutsCron);
+
+// Rapprochement quotidien du ledger avec Stripe (veille, UTC) : cron avec `Authorization: Bearer <CRON_SECRET>`.
+// Lecture seule côté argent : stocke un rapport et ne renvoie que des compteurs, ne corrige jamais rien.
+router.post('/ledger/reconcile-daily', cronLimiter, reconcileDailyCron);
 
 router.post(
   '/refund',
