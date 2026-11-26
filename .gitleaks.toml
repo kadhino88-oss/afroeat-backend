@@ -4,4 +4,9 @@ useDefault = true
 
 [allowlist]
 description = "Les clés publiables Stripe (pk_live_ / pk_test_) sont publiques par conception: elles sont embarquées dans l'app (EXPO_PUBLIC_STRIPE_KEY). Les clés secrètes (sk_, rk_, whsec_) restent détectées."
-regexes = ['''pk_(live|test)_[A-Za-z0-9]+''']
+regexes = [
+  '''pk_(live|test)_[A-Za-z0-9]+''',
+  # Valeurs factices des tests (tests/connectWebhook.test.js, tests/payoutRetry.test.js), jamais de vrais secrets.
+  '''whsec_connect_test''',
+  '''cron-secret-for-tests-[0-9]+''',
+]

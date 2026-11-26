@@ -427,6 +427,7 @@ const orderSchema = new mongoose.Schema(
     stripeCourierReversalId: { type: String, default: null, trim: true },
     stripeDisputeId: { type: String, default: null, trim: true },
     stripeDisputeClosedAt: { type: Date, default: null },
+    stripeDisputeLostAt: { type: Date, default: null },
 
     deliveryPerson: {
       type: mongoose.Schema.Types.ObjectId,

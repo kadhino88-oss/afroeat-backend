@@ -34,6 +34,14 @@ The `.env.example` file is a template only. The backend rejects its placeholder 
 - Card PaymentIntent and Checkout creation use the order amount, currency and owner stored in the database; the client only sends `orderId`. Payments are confirmed server-side by re-reading the Stripe object.
 - `POST /api/payments/webhook` uses Stripe's raw signed payload. Handled events: `checkout.session.completed`, `checkout.session.expired`, `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded`, `refund.updated`, `refund.failed`, `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`, `account.updated`. Each event is recorded by `event.id` (`StripeEvent`, TTL 30 days): a replayed event is acknowledged with 200 without re-running its effects, and a failed processing releases the record so Stripe can retry.
 
+- `POST /api/payments/webhook/connect` receives events from connected accounts (`account.updated` updates the partner's Connect status; other events are acknowledged without effect). It needs its own Stripe "Connected accounts" webhook endpoint and signing secret, `STRIPE_CONNECT_WEBHOOK_SECRET`; without it the endpoint answers 400. It uses the raw signed payload (mounted before `express.json`) and the same `event.id` de-duplication as the platform webhook. `account.updated` is still also handled on `/api/payments/webhook` for backward compatibility.
+
+### Scheduled payout retry
+
+`POST /api/payments/connect/retry-payouts` retries delivered orders whose payout is `pending` or `reconciliation_required`, oldest attempt first, at most `limit` per call (query parameter, default 20, max 50, within a 25 s time budget). It skips orders with an open dispute or without a verified marketplace split, and reuses the same checks and Stripe idempotency keys as the per-order admin retry, so overlapping or repeated runs cannot create a second transfer. It does nothing while `STRIPE_CONNECT_PAYOUTS_ENABLED` is off. The response only contains counters: `{ success, retried, succeeded, failed }` (plus `skipped` when disabled).
+
+It has no user session: it is authenticated with the shared secret `CRON_SECRET` sent as `Authorization: Bearer <CRON_SECRET>` (constant-time comparison). Without `CRON_SECRET` configured it answers 403; a missing or wrong secret answers 401. It sits behind the same `/api/payments` rate limiter as the other payment routes. Use a long random value and call it from your scheduler (for instance every 15 minutes); the repository does not ship the schedule (`vercel.json` and the workflows are unchanged).
+
 ### Production lock
 
 Real production (`NODE_ENV=production`, not the staging sandbox) is **locked** by default: order creation and card payment creation are refused. The lock is lifted only when all of these are set (`utils/runtimeEnvironment.js`):
@@ -53,15 +61,15 @@ P0 (blocking):
 - Fixed: `markOrderAsPaid` is atomic (conditional update), so webhook and `/confirm` announce an order only once; a payment received for an already cancelled order is refunded automatically (idempotent, `utils/orderRefund.js`) instead of reopening the order. If the refund cannot be issued, it is logged and `refundError` is set for manual reconciliation.
 - Fixed: webhook de-duplication by `event.id`; Stripe-mocked tests now cover `handleWebhook` and `markOrderAsPaid` (`tests/payment*.test.js`, `tests/webhook*.test.js`).
 - Partly handled events: `payment_intent.canceled`, `refund.updated` / `refund.failed` (failure recorded in `refundError`, never marked refunded) and `charge.dispute.updated` (flags the order). Still unhandled: async payment events and `transfer.*`.
-- TODO (needs design): a **lost dispute** only flags the order for manual review (`reconciliation_required`); Connect transfers are not reversed and `funds_withdrawn` / `funds_reinstated` balance movements are not reconciled.
-- TODO: payouts left `pending` / `reconciliation_required` are not retried automatically (admin retry per order only).
-- TODO: Connect account events need a separate Connect webhook endpoint with its own signing secret; only one `STRIPE_WEBHOOK_SECRET` is supported today.
-- TODO: no tests yet for the transfer/reversal flow with Stripe mocked, and no staging evidence yet.
+- Fixed: a **lost dispute** (`charge.dispute.closed`, status `lost`) now reverses the Connect transfers already made (`stripe.transfers.createReversal`, stable idempotency key per transfer, only while `STRIPE_CONNECT_PAYOUTS_ENABLED` is active) or, when no transfer exists, cancels the payout without any Stripe call. If a reversal fails (e.g. insufficient balance) the order goes to `reconciliation_required` with the reason for admin handling, and a later retry can never create a new transfer for a lost-dispute order (`stripeDisputeLostAt`). Still TODO: `funds_withdrawn` / `funds_reinstated` balance movements are not reconciled, and the platform balance is not checked before a reversal.
+- Fixed (needs scheduling): payouts left `pending` / `reconciliation_required` are retried in bounded batches by `POST /api/payments/connect/retry-payouts` (see "Scheduled payout retry" below). The platform does not schedule it: an operator must configure a cron that calls it; until then only the per-order admin retry runs.
+- Fixed: Connect account events have a separate endpoint, `POST /api/payments/webhook/connect`, verified with `STRIPE_CONNECT_WEBHOOK_SECRET` (see below).
+- Partly done: Stripe-mocked tests now cover transfers, lost-dispute reversals, batch retries and the Connect webhook. Still TODO: refund-driven reversal edge cases and any staging evidence with real Stripe test-mode accounts.
 - Note: in-flight webhook duplicates are acknowledged immediately; a processing lock abandoned by a crash is retaken after 2 minutes.
 
 P1:
 - There is no dedicated ledger: accounting lives in `Order` fields. No Stripe fee / balance-transaction tracking, so net margin is unknown, and no automatic reconciliation against Stripe.
-- Refund amounts are divided by 100 in `applyRefundResult`, which is wrong for zero-decimal currencies (XOF, XAF).
+- Fixed: minor-unit conversion lives in one module (`utils/currency.js`, `toMinorUnits` / `fromMinorUnits`) so refund amounts are correct for zero-decimal currencies (XOF, XAF). A partial refund seen by `applyRefundResult` is recorded but never marks the order fully refunded.
 - Idempotency keys are weak for Checkout (changes every minute) and absent on `/refund`; the PaymentIntent key expires after 24 h.
 
 Orders use menu-record prices and availability, restaurant currency/delivery fee/minimum-order rules, and a per-user idempotency key for safe client retries. The request fingerprint excludes client-supplied prices and labels. A reused key with different order details returns HTTP 409. Confirm the unique MongoDB index is present before relying on the concurrent-retry guarantee in a deployed database.
@@ -70,7 +78,7 @@ Donations are not offered until a beneficiary, accounting, settlement and public
 
 ## Production launch checklist
 
-Before production enablement, configure a secret manager, production MongoDB with backups, HTTPS API domain, exact `CORS_ORIGINS`, Stripe production keys and signed webhooks (platform and Connect), the country/platform and approved marketplace split rates, Connect partner verification/payout accounts, a cash settlement ledger if cash is offered, push/map credentials and legal/privacy/support pages. Close the P0 gaps above, then run MongoDB integration tests, Stripe test-mode payments and webhook cases, Android/iOS device tests, cancellation/refund/dispute tests, accessibility checks and network-failure/retry tests.
+Before production enablement, configure a secret manager, production MongoDB with backups, HTTPS API domain, exact `CORS_ORIGINS`, Stripe production keys and signed webhooks (platform `STRIPE_WEBHOOK_SECRET` and Connect `STRIPE_CONNECT_WEBHOOK_SECRET`), `CRON_SECRET` and a scheduler for the payout retry, the country/platform and approved marketplace split rates, Connect partner verification/payout accounts, a cash settlement ledger if cash is offered, push/map credentials and legal/privacy/support pages. Close the P0 gaps above, then run MongoDB integration tests, Stripe test-mode payments and webhook cases, Android/iOS device tests, cancellation/refund/dispute tests, accessibility checks and network-failure/retry tests.
 
 ## CI
 

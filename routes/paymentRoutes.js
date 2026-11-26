@@ -1,7 +1,25 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 const webhookRouter = express.Router();
+
+// Limiteurs déclarés sur la route elle-même (en plus de celui de /api/payments dans server.js) : l'analyse
+// de code ne voit pas un limiteur monté ailleurs. Réponse 429 : Stripe réessaie ses webhooks.
+const connectWebhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Trop de requêtes.' },
+});
+const cronLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Trop de requêtes.' },
+});
 
 const {
   createPaymentIntent,
@@ -10,6 +28,7 @@ const {
   selectCashPayment,
   getAvailablePaymentMethods,
   handleWebhook,
+  handleConnectWebhook,
   refundPayment,
 } = require('../controllers/paymentController');
 
@@ -22,6 +41,7 @@ const {
   reconcileDeliveredOrderTransfers,
   listPayoutReconciliation,
   resolvePayoutReconciliation,
+  retryPayoutsCron,
 } = require('../controllers/connectController');
 
 const {
@@ -84,6 +104,10 @@ router.post('/connect/reconcile/:orderId', protect, allowRoles('admin'), reconci
 router.get('/connect/reconciliation', protect, allowRoles('admin'), listPayoutReconciliation);
 router.post('/connect/reconciliation/:orderId/resolve', protect, allowRoles('admin'), resolvePayoutReconciliation);
 
+// Relance par lot des versements en attente : appelée par un cron avec `Authorization: Bearer <CRON_SECRET>`
+// (pas de session). Passe par le même limiteur « paiement » que le reste de /api/payments.
+router.post('/connect/retry-payouts', cronLimiter, retryPayoutsCron);
+
 router.post(
   '/refund',
   protect,
@@ -92,6 +116,8 @@ router.post(
 );
 
 webhookRouter.post('/', handleWebhook);
+// Événements des comptes connectés : secret de signature distinct (STRIPE_CONNECT_WEBHOOK_SECRET).
+webhookRouter.post('/connect', connectWebhookLimiter, handleConnectWebhook);
 
 module.exports = {
   router,

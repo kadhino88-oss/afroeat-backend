@@ -3,6 +3,8 @@
 // Remboursement automatique d'une commande payée par carte puis annulée avant livraison.
 // Le statut « Remboursé » est posé par le webhook Stripe (charge.refunded), pas ici.
 
+const { fromMinorUnits, toMinorUnits } = require('./currency');
+
 const shouldRefund = (order) =>
   Boolean(
     order &&
@@ -19,9 +21,20 @@ const applyRefundResult = (order, refund) => {
   if (!refund || typeof refund !== 'object') return;
   if (refund.id) order.stripeRefundId = refund.id;
   if (refund.status === 'succeeded' && !order.refundedAt) {
+    const currency = refund.currency || order.currency;
+    const refunded = fromMinorUnits(refund.amount, currency);
+    const expectedMinor = toMinorUnits(order.totalPrice, currency);
+    // Un remboursement partiel (ex. fait depuis le tableau de bord Stripe) n'est jamais présenté comme
+    // intégral : le montant est enregistré et le rapprochement reste à faire (charge.refunded).
+    if (refunded !== null && Number.isFinite(Number(refund.amount)) && expectedMinor > 0 &&
+        Number(refund.amount) < expectedMinor) {
+      order.stripeAmountRefunded = refunded;
+      order.lastPaymentError = 'Remboursement partiel Stripe reçu : rapprochement financier requis.';
+      return;
+    }
     order.paymentStatus = 'Remboursé';
     order.refundedAt = new Date();
-    if (Number.isFinite(refund.amount)) order.stripeAmountRefunded = refund.amount / 100;
+    if (refunded !== null) order.stripeAmountRefunded = refunded;
   }
 };
 

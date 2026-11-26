@@ -9,12 +9,14 @@ const {
   isMatchingCheckoutSession,
 } = require('../utils/paymentValidation');
 const { isFullyRefundedCharge } = require('../utils/refundGuards');
+const { toMinorUnits, fromMinorUnits, getMinAmount } = require('../utils/currency');
 const { refundCancelledOrder, applyRefundResult } = require('../utils/orderRefund');
 const StripeEvent = require('../models/StripeEvent');
 const { claimEvent, completeEvent, releaseEvent } = require('../utils/stripeEventLog');
 const {
   reverseOrderTransfers,
   flagOrderDispute,
+  handleLostDisputePayout,
   reconcileOrderPayout,
 } = require('../utils/marketplacePayouts');
 const { handleConnectedAccountUpdated } = require('./connectController');
@@ -41,25 +43,7 @@ const normalizeNumber = (value, fallback = 0) => {
 
 const roundMoney = (value) => Number(normalizeNumber(value, 0).toFixed(2));
 
-const CURRENCY_CONFIG = {
-  EUR: { multiplier: 100, minAmount: 0.5 },
-  USD: { multiplier: 100, minAmount: 0.5 },
-  GBP: { multiplier: 100, minAmount: 0.3 },
-  CHF: { multiplier: 100, minAmount: 0.5 },
-  CAD: { multiplier: 100, minAmount: 0.5 },
-  XOF: { multiplier: 1, minAmount: 100 },
-  XAF: { multiplier: 1, minAmount: 100 },
-};
-
-const toStripeAmount = (amount, currency) => {
-  const config = CURRENCY_CONFIG[String(currency).toUpperCase()];
-  return config ? Math.round(amount * config.multiplier) : null;
-};
-
-const getMinAmount = (currency) => {
-  const config = CURRENCY_CONFIG[String(currency).toUpperCase()];
-  return config ? config.minAmount : null;
-};
+const toStripeAmount = toMinorUnits;
 
 const hasStripeTestSecret = () =>
   /^(sk|rk)_test_/.test(String(process.env.STRIPE_SECRET_KEY || ''));
@@ -817,13 +801,7 @@ const handleWebhook = async (req, res) => {
           if (order) {
             const fullyRefunded = isFullyRefundedCharge(charge);
             const refundCurrency = String(charge.currency || order.currency || 'EUR').toUpperCase();
-            const refundMultiplier = ['XOF', 'XAF'].includes(refundCurrency)
-              ? 1
-              : (CURRENCY_CONFIG[refundCurrency]?.multiplier || 100);
-
-            order.stripeAmountRefunded = roundMoney(
-              Number(charge.amount_refunded || 0) / refundMultiplier
-            );
+            order.stripeAmountRefunded = fromMinorUnits(charge.amount_refunded || 0, refundCurrency) ?? 0;
             if (fullyRefunded) {
               order.paymentStatus = 'Remboursé';
               order.refundedAt = new Date();
@@ -872,9 +850,15 @@ const handleWebhook = async (req, res) => {
               order.payoutError = '';
               await order.save();
               await reconcileOrderPayout(order._id);
+            } else if (dispute.status === 'lost') {
+              // Litige perdu : réversion des transferts Connect déjà faits, ou annulation du versement.
+              order.stripeDisputeLostAt = order.stripeDisputeLostAt || new Date();
+              await order.save();
+              await handleLostDisputePayout(order);
+              console.warn('Litige Stripe perdu traité :', { orderId: String(order._id), disputeId: dispute.id });
             } else {
               order.payoutStatus = 'reconciliation_required';
-              order.payoutError = 'Litige Stripe perdu : règlement à examiner manuellement.';
+              order.payoutError = 'Litige Stripe clos sans gain confirmé : règlement à examiner manuellement.';
               order.payoutUpdatedAt = new Date();
               await order.save();
             }
@@ -905,6 +889,64 @@ const handleWebhook = async (req, res) => {
       received: false,
       code: 'WEBHOOK_PROCESSING_FAILED',
     });
+  }
+
+  return res.status(200).json({ received: true });
+};
+
+// Webhook « Connect » : événements des comptes connectés (ex. account.updated), signés avec leur propre
+// secret (STRIPE_CONNECT_WEBHOOK_SECRET). Même déduplication par event.id que le webhook plateforme.
+const handleConnectWebhook = async (req, res) => {
+  const signature = req.headers['stripe-signature'];
+  const secret = String(process.env.STRIPE_CONNECT_WEBHOOK_SECRET || '').trim();
+
+  if (!stripe || !signature || !secret) {
+    return res.status(400).json({
+      success: false,
+      message: 'Webhook Connect mal configuré.',
+    });
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, signature, secret);
+  } catch (error) {
+    console.error('CONNECT WEBHOOK SIGNATURE ERROR =>', error.message);
+    return res.status(400).json({
+      success: false,
+      code: 'INVALID_WEBHOOK_SIGNATURE',
+      message: 'Signature webhook Stripe invalide.',
+    });
+  }
+
+  let claimedEvent = false;
+  if (event?.id) {
+    try {
+      if ((await claimEvent(StripeEvent, event)) === 'duplicate') {
+        return res.status(200).json({ received: true, duplicate: true });
+      }
+      claimedEvent = true;
+    } catch (error) {
+      console.error('CONNECT WEBHOOK EVENT LOG ERROR =>', error?.message);
+      return res.status(500).json({ received: false, code: 'WEBHOOK_PROCESSING_FAILED' });
+    }
+  }
+
+  try {
+    if (event.type === 'account.updated') {
+      await handleConnectedAccountUpdated(event.data.object);
+    }
+    // Autres événements Connect : acquittés sans effet (aucune action financière depuis ce endpoint).
+    if (claimedEvent) await completeEvent(StripeEvent, event).catch((e) => console.error('CONNECT WEBHOOK EVENT LOG COMPLETE ERROR =>', e?.message));
+  } catch (error) {
+    console.error('CONNECT WEBHOOK PROCESSING ERROR =>', {
+      type: error?.type,
+      code: error?.code,
+      message: error?.message,
+    });
+    // Libère l'enregistrement pour que Stripe puisse rejouer l'événement.
+    if (claimedEvent) await releaseEvent(StripeEvent, event).catch((e) => console.error('CONNECT WEBHOOK EVENT LOG RELEASE ERROR =>', e?.message));
+    return res.status(500).json({ received: false, code: 'WEBHOOK_PROCESSING_FAILED' });
   }
 
   return res.status(200).json({ received: true });
@@ -1107,5 +1149,6 @@ module.exports = {
   confirmPayment,
   selectCashPayment,
   handleWebhook,
+  handleConnectWebhook,
   refundPayment,
 };

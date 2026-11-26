@@ -8,6 +8,8 @@ const {
   isConnectPayoutsEnabled,
   isTransferCountryAllowed,
 } = require('../utils/marketplacePayouts');
+const { checkCronSecret } = require('../utils/cronAuth');
+const { retryPendingPayouts } = require('../utils/payoutRetry');
 
 const getStripe = () => {
   const secretKey = String(process.env.STRIPE_SECRET_KEY || '').trim();
@@ -365,7 +367,23 @@ const resolvePayoutReconciliation = async (req, res) => {
   }
 };
 
+// Appelé par un cron (secret partagé, pas de session utilisateur). Réponse : compteurs uniquement.
+const retryPayoutsCron = async (req, res) => {
+  const auth = checkCronSecret(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ success: false, code: auth.code, message: 'Accès refusé.' });
+  }
+  try {
+    const result = await retryPendingPayouts({ limit: req.query?.limit });
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    console.error('PAYOUT RETRY CRON ERROR =>', error?.message);
+    return res.status(500).json({ success: false, message: 'Relance des versements impossible.' });
+  }
+};
+
 module.exports = {
+  retryPayoutsCron,
   getConnectStatus,
   startConnectOnboarding,
   createConnectDashboardLink,
