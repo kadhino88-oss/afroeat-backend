@@ -22,6 +22,7 @@ const {
   reconcileDeliveredOrderTransfers,
   listPayoutReconciliation,
   resolvePayoutReconciliation,
+  retryPayoutsCron,
 } = require('../controllers/connectController');
 
 const {
@@ -83,6 +84,10 @@ router.post('/connect/dashboard-link', protect, allowRoles('restaurant', 'livreu
 router.post('/connect/reconcile/:orderId', protect, allowRoles('admin'), reconcileDeliveredOrderTransfers);
 router.get('/connect/reconciliation', protect, allowRoles('admin'), listPayoutReconciliation);
 router.post('/connect/reconciliation/:orderId/resolve', protect, allowRoles('admin'), resolvePayoutReconciliation);
+
+// Relance par lot des versements en attente : appelée par un cron avec `Authorization: Bearer <CRON_SECRET>`
+// (pas de session). Passe par le même limiteur « paiement » que le reste de /api/payments.
+router.post('/connect/retry-payouts', retryPayoutsCron);
 
 router.post(
   '/refund',
