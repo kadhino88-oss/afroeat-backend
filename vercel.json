@@ -6,5 +6,20 @@
       "includeFiles": "{config,controllers,data,middleware,models,routes,utils}/**"
     }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/payments/connect/retry-payouts",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/payments/ledger/reconcile-daily",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }
