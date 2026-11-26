@@ -138,6 +138,87 @@ const createTransfer = async ({ order, stripe, owner, amount, kind, chargeId }) 
   return transfer.id;
 };
 
+const TRANSFER_KINDS = [
+  ['restaurant', 'stripeRestaurantTransferId', 'stripeRestaurantReversalId'],
+  ['courier', 'stripeCourierTransferId', 'stripeCourierReversalId'],
+];
+
+// Litige perdu (charge.dispute.closed, statut « lost ») : les fonds sont repris à la plateforme.
+// - aucun transfert Connect effectué : le versement est simplement annulé (aucun appel Stripe) ;
+// - transferts effectués : réversion Stripe (même clé d'idempotence que la réversion de remboursement,
+//   stable par transfert) si les versements Connect sont activés ;
+// - tout échec (solde insuffisant…) ne lève jamais : la commande passe en `reconciliation_required`
+//   avec le motif, pour traitement administrateur. Rejouable sans double réversion.
+const handleLostDisputePayout = async (order) => {
+  if (order.payoutStatus === 'manually_reconciled') {
+    return { success: true, reason: 'manually_reconciled' };
+  }
+
+  const transfers = TRANSFER_KINDS.filter(([, transferField]) => order[transferField]);
+  const pending = transfers.filter(([, , reversalField]) => !order[reversalField]);
+
+  if (order.payoutStatus === 'processing') {
+    // Un versement est peut-être en cours de création : ne rien annuler à l'aveugle.
+    await markReconciliationRequired(
+      order,
+      'Litige Stripe perdu pendant un versement en cours : vérification manuelle requise.'
+    );
+    return { success: false, reason: 'payout_in_progress' };
+  }
+
+  if (!pending.length) {
+    if (order.payoutStatus === 'reversed') return { success: true, reason: 'already_reversed' };
+    order.payoutStatus = 'reversed';
+    order.payoutError = transfers.length
+      ? ''
+      : 'Litige Stripe perdu : versement annulé (aucun transfert effectué).';
+    order.payoutUpdatedAt = new Date();
+    await order.save();
+    return { success: true, reason: transfers.length ? 'reversed' : 'payout_cancelled' };
+  }
+
+  if (!isConnectPayoutsEnabled()) {
+    await markReconciliationRequired(
+      order,
+      'Litige Stripe perdu : transferts à réverser manuellement (versements Connect désactivés).'
+    );
+    return { success: false, reason: 'connect_disabled' };
+  }
+
+  try {
+    const stripe = getStripe();
+    for (const [kind, transferField, reversalField] of pending) {
+      const reversal = await stripe.transfers.createReversal(
+        order[transferField],
+        {
+          metadata: {
+            orderId: order._id.toString(), payoutType: kind, platform: 'afroeat', reason: 'dispute_lost',
+          },
+        },
+        { idempotencyKey: 'afroeat_' + kind + '_reversal_' + order._id.toString() }
+      );
+      order[reversalField] = reversal.id;
+      order.payoutUpdatedAt = new Date();
+      await order.save();
+    }
+    order.payoutStatus = 'reversed';
+    order.payoutError = '';
+    order.payoutUpdatedAt = new Date();
+    await order.save();
+    return { success: true, reason: 'reversed' };
+  } catch (error) {
+    await markReconciliationRequired(
+      order,
+      'Litige Stripe perdu : réversion de transfert impossible (' +
+        (error?.code || error?.type || 'erreur Stripe') + ') : traitement admin requis.'
+    );
+    console.error('STRIPE DISPUTE REVERSAL ERROR =>', {
+      orderId: String(order._id), code: error?.code, type: error?.type,
+    });
+    return { success: false, reason: 'reversal_failed' };
+  }
+};
+
 const createDeliveredOrderTransfers = async (orderId) => {
   if (!isConnectPayoutsEnabled()) return { skipped: true, reason: 'connect_disabled' };
 
@@ -154,6 +235,7 @@ const createDeliveredOrderTransfers = async (orderId) => {
   if (order.payoutStatus === 'manually_reconciled') {
     return { success: true, payoutStatus: order.payoutStatus };
   }
+  if (order.stripeDisputeLostAt) return handleLostDisputePayout(order);
   if (order.paymentMethod === 'cash') {
     order.payoutStatus = 'not_applicable';
     order.payoutError = 'Commande encaissée en espèces : règlement hors Stripe à rapprocher.';
@@ -314,6 +396,7 @@ const reconcileOrderPayout = async (orderId) => {
     await markReconciliationRequired(order, 'Litige Stripe ouvert : examen manuel requis.');
     return { success: false, reason: 'open_dispute' };
   }
+  if (order.stripeDisputeLostAt) return handleLostDisputePayout(order);
   if (order.paymentStatus === 'Remboursé') {
     if (!order.stripePaymentIntentId) {
       await markReconciliationRequired(order, 'PaymentIntent absent pour réverser les transferts remboursés.');
@@ -360,6 +443,7 @@ module.exports = {
   reverseOrderTransfers,
   reconcileOrderPayout,
   flagOrderDispute,
+  handleLostDisputePayout,
   toStripeAmount,
   isPartialRefundCharge,
   validatePayoutPaymentIntent,

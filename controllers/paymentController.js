@@ -16,6 +16,7 @@ const { claimEvent, completeEvent, releaseEvent } = require('../utils/stripeEven
 const {
   reverseOrderTransfers,
   flagOrderDispute,
+  handleLostDisputePayout,
   reconcileOrderPayout,
 } = require('../utils/marketplacePayouts');
 const { handleConnectedAccountUpdated } = require('./connectController');
@@ -849,9 +850,15 @@ const handleWebhook = async (req, res) => {
               order.payoutError = '';
               await order.save();
               await reconcileOrderPayout(order._id);
+            } else if (dispute.status === 'lost') {
+              // Litige perdu : réversion des transferts Connect déjà faits, ou annulation du versement.
+              order.stripeDisputeLostAt = order.stripeDisputeLostAt || new Date();
+              await order.save();
+              await handleLostDisputePayout(order);
+              console.warn('Litige Stripe perdu traité :', { orderId: String(order._id), disputeId: dispute.id });
             } else {
               order.payoutStatus = 'reconciliation_required';
-              order.payoutError = 'Litige Stripe perdu : règlement à examiner manuellement.';
+              order.payoutError = 'Litige Stripe clos sans gain confirmé : règlement à examiner manuellement.';
               order.payoutUpdatedAt = new Date();
               await order.save();
             }
