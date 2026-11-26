@@ -19,7 +19,17 @@ const sendMail = async ({ to, subject, text }, fetchImpl = fetch) => {
       body: JSON.stringify({ from, to: [to], subject, text }),
       signal: AbortSignal.timeout(8000),
     });
-    if (!response.ok) return { sent: false, reason: `HTTP_${response.status}` };
+    if (!response.ok) {
+      // Détail renvoyé par Resend (ex. « domaine non vérifié »), sans donnée sensible, pour diagnostiquer.
+      let detail = '';
+      try {
+        const body = await response.json();
+        detail = String(body?.message || body?.name || '').replace(/\s+/g, ' ').slice(0, 160);
+      } catch {
+        detail = '';
+      }
+      return { sent: false, reason: detail ? `HTTP_${response.status}: ${detail}` : `HTTP_${response.status}` };
+    }
     return { sent: true };
   } catch (error) {
     return { sent: false, reason: error?.name === 'TimeoutError' ? 'TIMEOUT' : 'NETWORK' };
