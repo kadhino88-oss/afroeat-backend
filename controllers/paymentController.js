@@ -894,6 +894,64 @@ const handleWebhook = async (req, res) => {
   return res.status(200).json({ received: true });
 };
 
+// Webhook « Connect » : événements des comptes connectés (ex. account.updated), signés avec leur propre
+// secret (STRIPE_CONNECT_WEBHOOK_SECRET). Même déduplication par event.id que le webhook plateforme.
+const handleConnectWebhook = async (req, res) => {
+  const signature = req.headers['stripe-signature'];
+  const secret = String(process.env.STRIPE_CONNECT_WEBHOOK_SECRET || '').trim();
+
+  if (!stripe || !signature || !secret) {
+    return res.status(400).json({
+      success: false,
+      message: 'Webhook Connect mal configuré.',
+    });
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, signature, secret);
+  } catch (error) {
+    console.error('CONNECT WEBHOOK SIGNATURE ERROR =>', error.message);
+    return res.status(400).json({
+      success: false,
+      code: 'INVALID_WEBHOOK_SIGNATURE',
+      message: 'Signature webhook Stripe invalide.',
+    });
+  }
+
+  let claimedEvent = false;
+  if (event?.id) {
+    try {
+      if ((await claimEvent(StripeEvent, event)) === 'duplicate') {
+        return res.status(200).json({ received: true, duplicate: true });
+      }
+      claimedEvent = true;
+    } catch (error) {
+      console.error('CONNECT WEBHOOK EVENT LOG ERROR =>', error?.message);
+      return res.status(500).json({ received: false, code: 'WEBHOOK_PROCESSING_FAILED' });
+    }
+  }
+
+  try {
+    if (event.type === 'account.updated') {
+      await handleConnectedAccountUpdated(event.data.object);
+    }
+    // Autres événements Connect : acquittés sans effet (aucune action financière depuis ce endpoint).
+    if (claimedEvent) await completeEvent(StripeEvent, event).catch((e) => console.error('CONNECT WEBHOOK EVENT LOG COMPLETE ERROR =>', e?.message));
+  } catch (error) {
+    console.error('CONNECT WEBHOOK PROCESSING ERROR =>', {
+      type: error?.type,
+      code: error?.code,
+      message: error?.message,
+    });
+    // Libère l'enregistrement pour que Stripe puisse rejouer l'événement.
+    if (claimedEvent) await releaseEvent(StripeEvent, event).catch((e) => console.error('CONNECT WEBHOOK EVENT LOG RELEASE ERROR =>', e?.message));
+    return res.status(500).json({ received: false, code: 'WEBHOOK_PROCESSING_FAILED' });
+  }
+
+  return res.status(200).json({ received: true });
+};
+
 const getAvailablePaymentMethods = async (req, res) => {
   let cash = !isRealProduction();
   const orderId = req.query?.orderId;
@@ -1091,5 +1149,6 @@ module.exports = {
   confirmPayment,
   selectCashPayment,
   handleWebhook,
+  handleConnectWebhook,
   refundPayment,
 };

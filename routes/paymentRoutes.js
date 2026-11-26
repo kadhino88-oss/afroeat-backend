@@ -10,6 +10,7 @@ const {
   selectCashPayment,
   getAvailablePaymentMethods,
   handleWebhook,
+  handleConnectWebhook,
   refundPayment,
 } = require('../controllers/paymentController');
 
@@ -97,6 +98,8 @@ router.post(
 );
 
 webhookRouter.post('/', handleWebhook);
+// Événements des comptes connectés : secret de signature distinct (STRIPE_CONNECT_WEBHOOK_SECRET).
+webhookRouter.post('/connect', handleConnectWebhook);
 
 module.exports = {
   router,
