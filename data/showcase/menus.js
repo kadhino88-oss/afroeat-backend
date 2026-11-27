@@ -2,7 +2,8 @@
 
 // Menus INDICATIFS recopiés des pages publiques des restaurants (texte seulement, aucune photo), phase de test.
 // Rien n'est inventé : un prix ou une description absents de la page restent absents. Prix en monnaie du restaurant.
-// `token` : mot distinctif cherché dans le nom de la fiche existante (le script exige un résultat unique).
+// `token` : mot distinctif cherché dans le nom de la fiche (ou, à défaut, du lieu d'annuaire) : résultat unique exigé.
+// `country` : pays du commerce (la devise suit), à vérifier avec la ville du lieu d'annuaire avant toute écriture.
 const item = (category, name, price, description = '') => ({ category, name, price, description });
 
 const bombayNaans = [
@@ -24,6 +25,7 @@ module.exports = [
   {
     key: 'bombay-snacks-thonon',
     token: 'bombay',
+    country: 'France',
     cuisine: 'Indienne, fast-food halal',
     source: 'https://bombaysnacks-thonon.fr/',
     items: [...bombayNaans, ...bombayKids, ...bombayDrinks],
@@ -31,6 +33,7 @@ module.exports = [
   {
     key: 'le-224-annemasse',
     token: '224',
+    country: 'France',
     cuisine: 'Africaine',
     source: 'https://le224.fr/',
     items: [
@@ -62,6 +65,7 @@ module.exports = [
   {
     key: 'nyala-barka',
     token: 'nyala',
+    country: 'Suisse',
     cuisine: 'Africaine',
     source: 'https://www.nyalabarka.ch/',
     items: [
