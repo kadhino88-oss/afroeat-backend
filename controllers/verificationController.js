@@ -302,6 +302,21 @@ const reviewDocument = async (req, res) => {
       { verified }
     );
 
+    // Le partenaire n'avait aucun moyen de savoir qu'une pièce était traitée : notification (échec silencieux).
+    try {
+      const { sendPushToUser } = require('../utils/pushNotifications');
+      await sendPushToUser(document.user, {
+        title: 'Afroeat',
+        body:
+          decision === 'approved'
+            ? 'Une de tes pièces justificatives a été acceptée.'
+            : `Une de tes pièces a été refusée : ${String(reason || '').slice(0, 120)}. Tu peux la renvoyer.`,
+        data: { type: 'verification_decision', decision, kind: document.kind },
+      });
+    } catch (notifyError) {
+      console.warn('Notification de décision de vérification non envoyée :', notifyError.message);
+    }
+
     return res.json({ success: true, document: toPublicDocument(document), verified });
   } catch (error) {
     console.error('Review verification document error:', error.message);

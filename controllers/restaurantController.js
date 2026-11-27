@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { normalizeOpeningHours } = require('../utils/openingHours');
-const { geocodeAddress } = require('../utils/partnerRestaurant');
+const { geocodeAddress, normalizeCountry } = require('../utils/partnerRestaurant');
 
 const Restaurant = require('../models/Restaurant');
 const User = require('../models/User');
@@ -288,6 +288,25 @@ const canManageRestaurant = (req, restaurant) => {
   return false;
 };
 
+const OPENING_REASON_MESSAGES = {
+  NO_POSITION: "La position du restaurant n'est pas renseignée (utilise « Placer à l'adresse du restaurant »).",
+  NO_MENU_ITEM: "Ajoute au moins un plat disponible avant d'ouvrir.",
+};
+
+const hasValidPosition = (restaurant, payload = {}) => {
+  const lat = Number(payload.latitude ?? restaurant.latitude);
+  const lng = Number(payload.longitude ?? restaurant.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+};
+
+const getOpeningReadiness = async (restaurant, payload = {}) => {
+  const reasons = [];
+  if (!hasValidPosition(restaurant, payload)) reasons.push('NO_POSITION');
+  const available = await MenuItem.countDocuments({ restaurant: restaurant._id, available: { $ne: false } });
+  if (available < 1) reasons.push('NO_MENU_ITEM');
+  return { ready: reasons.length === 0, reasons, message: reasons.map((r) => OPENING_REASON_MESSAGES[r]).join(' ') };
+};
+
 const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
   const payload    = {};
   const incomingOwner = normalizeText(reqBody.owner);
@@ -306,7 +325,7 @@ const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
   payload.cuisine     = normalizeText(reqBody.cuisine);
   payload.address     = normalizeText(reqBody.address);
   payload.city        = normalizeText(reqBody.city);
-  payload.country     = normalizeText(reqBody.country);
+  payload.country     = normalizeCountry(normalizeText(reqBody.country));
   payload.description = normalizeText(reqBody.description);
   payload.phone       = normalizeText(reqBody.phone);
   payload.email       = normalizeText(reqBody.email);
@@ -326,7 +345,8 @@ const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
   if (reqBody.pickupEnabled !== undefined) payload.pickupEnabled = normalizeBoolean(reqBody.pickupEnabled, true);
   if (reqBody.notificationsEnabled !== undefined) payload.notificationsEnabled = normalizeBoolean(reqBody.notificationsEnabled, true);
   if (reqBody.preparationMode !== undefined) payload.preparationMode = normalizeBoolean(reqBody.preparationMode, true);
-  if (reqBody.isActive  !== undefined) payload.isActive   = normalizeBoolean(reqBody.isActive,  true);
+  if (reqBody.isActive  !== undefined && reqUser?.role === 'admin') payload.isActive = normalizeBoolean(reqBody.isActive, true);
+  if (reqUser?.role !== 'admin') payload.isActive = false; // visible seulement après vérification par l'administration
   if (reqBody.latitude  !== undefined) payload.latitude   = normalizeNumber(reqBody.latitude,   NaN);
   if (reqBody.longitude !== undefined) payload.longitude  = normalizeNumber(reqBody.longitude,  NaN);
 
@@ -335,25 +355,33 @@ const buildCreatePayload = async (reqBody = {}, reqUser = null) => {
 
 const buildUpdatePayload = async (reqBody = {}, reqUser = null) => {
   const payload = {};
+  // Pays, devise et visibilité publique ne se règlent que par l'administration : un restaurateur ne peut
+  // ni changer la devise d'une fiche qui reçoit des paiements, ni se rendre visible sans vérification.
+  const isAdminUser = reqUser?.role === 'admin';
   if (reqBody.name        !== undefined) payload.name        = normalizeText(reqBody.name);
   if (reqBody.businessType !== undefined) payload.businessType = normalizeBusinessType(reqBody.businessType);
   if (reqBody.cuisine     !== undefined) payload.cuisine     = normalizeText(reqBody.cuisine);
   if (reqBody.address     !== undefined) payload.address     = normalizeText(reqBody.address);
   if (reqBody.city        !== undefined) payload.city        = normalizeText(reqBody.city);
-  if (reqBody.country     !== undefined) payload.country     = normalizeText(reqBody.country);
+  if (isAdminUser && reqBody.country !== undefined) payload.country = normalizeCountry(normalizeText(reqBody.country));
   if (reqBody.description !== undefined) payload.description = normalizeText(reqBody.description);
   if (reqBody.phone       !== undefined) payload.phone       = normalizeText(reqBody.phone);
   if (reqBody.email       !== undefined) payload.email       = normalizeText(reqBody.email);
   if (reqBody.image       !== undefined) payload.image       = normalizeText(reqBody.image);
   if (reqBody.coverImage  !== undefined) payload.coverImage  = normalizeText(reqBody.coverImage);
   if (reqBody.logo        !== undefined) payload.logo        = normalizeText(reqBody.logo);
-  if (reqBody.currency    !== undefined) payload.currency    = normalizeText(reqBody.currency, 'EUR').toUpperCase();
+  if (isAdminUser && reqBody.currency !== undefined) payload.currency = normalizeText(reqBody.currency, 'EUR').toUpperCase();
   if (reqBody.openingHours !== undefined) {
     const hours = normalizeOpeningHours(reqBody.openingHours);
     if (hours.error) throw new Error(hours.error);
     payload.openingHours = hours.value;
   }
   if (reqBody.deliveryFee !== undefined) payload.deliveryFee = normalizeNumber(reqBody.deliveryFee, 0);
+  if (reqBody.deliveryRadiusKm !== undefined) {
+    const radius = reqBody.deliveryRadiusKm === null || reqBody.deliveryRadiusKm === '' ? null : normalizeNumber(reqBody.deliveryRadiusKm, NaN);
+    if (radius !== null && !(radius >= 1 && radius <= 100)) throw new Error('Le rayon de livraison doit être compris entre 1 et 100 km.');
+    payload.deliveryRadiusKm = radius;
+  }
   if (reqBody.minimumOrderAmount !== undefined) {
     payload.minimumOrderAmount = normalizeNumber(reqBody.minimumOrderAmount, 0);
     if (!(payload.minimumOrderAmount >= 0) || payload.minimumOrderAmount > 1000) {
@@ -369,7 +397,7 @@ const buildUpdatePayload = async (reqBody = {}, reqUser = null) => {
   if (reqBody.pickupEnabled !== undefined) payload.pickupEnabled = normalizeBoolean(reqBody.pickupEnabled, true);
   if (reqBody.notificationsEnabled !== undefined) payload.notificationsEnabled = normalizeBoolean(reqBody.notificationsEnabled, true);
   if (reqBody.preparationMode !== undefined) payload.preparationMode = normalizeBoolean(reqBody.preparationMode, true);
-  if (reqBody.isActive    !== undefined) payload.isActive    = normalizeBoolean(reqBody.isActive, true);
+  if (isAdminUser && reqBody.isActive !== undefined) payload.isActive = normalizeBoolean(reqBody.isActive, true);
   if (reqBody.latitude    !== undefined) payload.latitude    = normalizeNumber(reqBody.latitude,  NaN);
   if (reqBody.longitude   !== undefined) payload.longitude   = normalizeNumber(reqBody.longitude, NaN);
 
@@ -645,6 +673,15 @@ const updateRestaurant = async (req, res) => {
     }
     const payload          = await buildUpdatePayload(req.body, req.user);
 
+    // Ouvrir aux commandes : il faut une position sur la carte et au moins un article disponible.
+    // L'administration peut toujours forcer l'état (ex. fermeture d'urgence ou réouverture).
+    if (payload.isOpen === true && req.user?.role !== 'admin') {
+      const readiness = await getOpeningReadiness(existingRestaurant, payload);
+      if (!readiness.ready) {
+        return res.status(422).json({ success: false, code: 'RESTAURANT_NOT_READY', reasons: readiness.reasons, message: readiness.message });
+      }
+    }
+
     // « Placer mon restaurant à son adresse » : le serveur cherche la position de l'adresse.
     if (req.body?.locateFromAddress === true) {
       const point = await geocodeAddress(
@@ -700,6 +737,8 @@ const deleteRestaurant = async (req, res) => {
 
 module.exports = {
   buildUpdatePayload,
+  buildCreatePayload,
+  getOpeningReadiness,
   getNearbyRestaurants,
   getRestaurants,
   getMyRestaurant,

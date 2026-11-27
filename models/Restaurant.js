@@ -339,6 +339,14 @@ const restaurantSchema = new mongoose.Schema(
       },
     },
 
+    // Rayon de livraison en km autour du commerce ; vide = valeur par défaut du serveur (DEFAULT_DELIVERY_RADIUS_KM).
+    deliveryRadiusKm: {
+      type: Number,
+      default: null,
+      min: [1, 'Le rayon de livraison minimum est de 1 km'],
+      max: [100, 'Le rayon de livraison maximum est de 100 km'],
+    },
+
     isOpen: {
       type: Boolean,
       default: true,

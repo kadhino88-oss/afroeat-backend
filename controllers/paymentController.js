@@ -53,7 +53,7 @@ const hasStripeTestSecret = () =>
 const canCreateCardPayment = () =>
   !isProductionLocked() && Boolean(stripe) && (hasStripeTestSecret() || isLiveCommerceOpen());
 
-const { isCashAllowedForOrder, cashDecision } = require('../utils/cashPayment');
+const { isCashAllowedForOrder, cashDecision, isCashEnabled } = require('../utils/cashPayment');
 
 const stripeUnavailable = (res) =>
   res.status(503).json({
@@ -1002,7 +1002,7 @@ const handleConnectWebhook = async (req, res) => {
 };
 
 const getAvailablePaymentMethods = async (req, res) => {
-  let cash = !isRealProduction();
+  let cash = isCashEnabled();
   const orderId = req.query?.orderId;
   if (isRealProduction() && orderId && isValidObjectId(orderId)) {
     try {

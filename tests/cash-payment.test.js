@@ -23,3 +23,13 @@ test('une commande en espèces est proposée aux livreurs sans paiement préalab
   assert.match(JSON.stringify(filter), /"paymentMethod":"cash"/);
   assert.match(JSON.stringify(filter), /"paymentStatus":"Payé"/);
 });
+
+test('en vraie production, les espèces restent fermées sauf CASH_PAYMENTS_ENABLED=true', () => {
+  const { isCashEnabled } = require('../utils/cashPayment');
+  const prod = { NODE_ENV: 'production', STRIPE_SECRET_KEY: 'sk_live_x' };
+  assert.equal(isCashEnabled(prod), false);
+  assert.equal(cashDecision({ selfDelivery: true, totalPrice: 10 }, prod).code, 'CASH_ON_DELIVERY_DISABLED');
+  assert.equal(isCashEnabled({ ...prod, CASH_PAYMENTS_ENABLED: 'true' }), true);
+  assert.equal(cashDecision({ selfDelivery: true, totalPrice: 10 }, { ...prod, CASH_PAYMENTS_ENABLED: 'true' }).allowed, true);
+  assert.equal(isCashEnabled({ NODE_ENV: 'development' }), true); // hors production : inchangé
+});

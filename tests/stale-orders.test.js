@@ -44,11 +44,11 @@ test('commandes sans réponse : annulées et remboursées ; paiement abandonné 
   const refunds = [];
   const stripe = { refunds: { create: async (p) => { refunds.push(p.payment_intent); return {}; } } };
   const Order = {
-    find: (q) => ({ limit: async () => (q.paymentStatus === 'Payé' ? [paid] : [abandoned]) }),
+    find: (q) => ({ limit: async () => (q.status === 'Confirmée' ? [] : q.paymentStatus === 'Payé' ? [paid] : [abandoned]) }),
   };
   const notified = [];
   const out = await expireStaleOrders({ Order, stripe, notify: async (o) => notified.push(o._id) });
-  assert.deepEqual(out, { unanswered: 1, unpaid: 1, refunded: 1 });
+  assert.deepEqual(out, { unanswered: 1, unpaid: 1, stalled: 0, refunded: 1 });
   assert.equal(paid.status, 'Annulée');
   assert.equal(paid.statusHistory[0].updatedByRole, 'system');
   assert.deepEqual(refunds, ['pi_123']);
@@ -73,4 +73,35 @@ test('le rapprochement rattrape un remboursement dont le webhook n’est jamais 
   const stripe = { refunds: { list: async () => ({ data: [{ id: 're_2', status: 'succeeded', amount: 200 }] }) } };
   assert.equal(await reconcileRefunds({ Order, stripe }), 1);
   assert.equal(order.paymentStatus, 'Remboursé');
+});
+
+test('commande payée « Confirmée » jamais préparée : annulée et remboursée, requête sans livreur', async () => {
+  const stalled = makeOrder({ _id: 'o9', status: 'Confirmée' });
+  const refunds = [];
+  const stripe = { refunds: { create: async (p) => { refunds.push(p.payment_intent); return {}; } } };
+  const queries = [];
+  const Order = {
+    find: (q) => { queries.push(q); return { limit: async () => (q.status === 'Confirmée' ? [stalled] : []) }; },
+  };
+  const now = Date.now();
+  const notified = [];
+  const out = await expireStaleOrders({ Order, stripe, now, prepareTimeoutMin: 20, notify: async (o, why) => notified.push([o._id, why]) });
+  assert.equal(out.stalled, 1);
+  assert.equal(out.refunded, 1);
+  assert.equal(stalled.status, 'Annulée');
+  assert.match(stalled.statusHistory[0].note, /préparation/);
+  assert.deepEqual(refunds, ['pi_123']);
+  assert.deepEqual(notified, [['o9', 'stalled']]);
+  const q = queries.find((x) => x.status === 'Confirmée');
+  assert.equal(q.deliveryPerson, null);
+  assert.equal(q.updatedAt.$lt.getTime(), now - 20 * 60000);
+});
+
+test('commande espèces « Confirmée » ignorée : annulée sans remboursement', async () => {
+  const cash = makeOrder({ _id: 'o8', status: 'Confirmée', paymentStatus: 'Non payé', paymentMethod: 'cash', stripePaymentIntentId: '' });
+  const Order = { find: (q) => ({ limit: async () => (q.status === 'Confirmée' ? [cash] : []) }) };
+  const out = await expireStaleOrders({ Order, stripe: { refunds: { create: async () => { throw new Error('ne doit pas être appelé'); } } } });
+  assert.equal(out.stalled, 1);
+  assert.equal(out.refunded, 0);
+  assert.equal(cash.status, 'Annulée');
 });

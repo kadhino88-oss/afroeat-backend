@@ -28,6 +28,14 @@ const { orderContainsAlcohol, isAgeConfirmed, ageCheckError } = require('../util
 
 const stripeClient = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
+// Le propriétaire de la fiche doit avoir un compte actif (suspension, suppression de compte).
+const isRestaurantOwnerActive = async (restaurant) => {
+  if (!restaurant?.owner) return true; // fiche sans propriétaire (annuaire / admin) : pas de contrôle
+  const owner = await User.findById(restaurant.owner).select('accountStatus').lean();
+  if (!owner) return false;
+  return !['suspended', 'deleted', 'rejected'].includes(String(owner.accountStatus || ''));
+};
+
 // Annule (et rembourse) les commandes sans suite à l'occasion des consultations de listes.
 const expireStaleOrdersOpportunistically = () =>
   maybeExpireStaleOrders({
@@ -37,11 +45,12 @@ const expireStaleOrdersOpportunistically = () =>
     notify: async (order) =>
       sendPushToUser(order.user, {
         title: 'Afroeat',
-        body: 'Ta commande a été annulée car le restaurant n’a pas répondu. Tu es remboursé automatiquement.',
+        body: 'Ta commande a été annulée car le restaurant n’a pas répondu. Si tu avais payé, tu es remboursé automatiquement.',
         data: { orderId: String(order._id), type: 'order_status', status: 'Annulée' },
       }).catch(() => {}),
   });
 const { evaluateDeliveryPayment } = require('../utils/orderGuards');
+const { checkDeliveryZone } = require('../utils/deliveryZone');
 const { getMarketplaceRates } = require('../config/marketplaceRates');
 const { calculateMarketplaceSplit } = require('../utils/marketplaceAccounting');
 const { sanitizeOrderForViewer } = require('../utils/orderResponseSanitizer');
@@ -764,7 +773,7 @@ const createOrder = async (req, res) => {
     }
 
     const restaurantExists = await Restaurant.findById(restaurant).select(
-      '_id owner latitude longitude location address city country currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery pickupEnabled createdAt'
+      '_id owner latitude longitude location address city country currency deliveryFee deliveryRadiusKm minimumOrderAmount isActive isOpen openingHours selfDelivery pickupEnabled createdAt'
     );
 
     if (!restaurantExists) {
@@ -781,6 +790,28 @@ const createOrder = async (req, res) => {
         code: 'RESTAURANT_INACTIVE',
         message: 'Ce restaurant ne prend pas de commandes pour le moment.',
       });
+    }
+
+    // Un propriétaire suspendu ou supprimé ne reçoit plus de commandes, même si sa fiche est encore visible.
+    if (!(await isRestaurantOwnerActive(restaurantExists))) {
+      return res.status(409).json({
+        success: false,
+        code: 'RESTAURANT_INACTIVE',
+        message: 'Ce restaurant ne prend pas de commandes pour le moment.',
+      });
+    }
+
+    if (!pickup) {
+      const zone = await checkDeliveryZone({ restaurant: restaurantExists, address: safeDeliveryAddress });
+      if (!zone.ok) {
+        return res.status(422).json({
+          success: false,
+          code: 'OUT_OF_DELIVERY_ZONE',
+          radiusKm: zone.radiusKm,
+          distanceKm: zone.distanceKm,
+          message: `Cette adresse est hors de la zone de livraison de ce commerce (${zone.radiusKm} km).`,
+        });
+      }
     }
 
     // Commande programmée : le commerce peut être fermé maintenant, pas à l'heure prévue.
@@ -1473,7 +1504,7 @@ const getOrderQuote = async (req, res) => {
     }
 
     const restaurantDoc = await Restaurant.findById(restaurant).select(
-      '_id currency deliveryFee minimumOrderAmount isActive isOpen openingHours selfDelivery pickupEnabled createdAt'
+      '_id owner latitude longitude location country currency deliveryFee deliveryRadiusKm minimumOrderAmount isActive isOpen openingHours selfDelivery pickupEnabled createdAt'
     );
 
     if (!restaurantDoc) {
@@ -1490,6 +1521,30 @@ const getOrderQuote = async (req, res) => {
         code: 'RESTAURANT_INACTIVE',
         message: 'Ce restaurant ne prend pas de commandes pour le moment.',
       });
+    }
+
+    if (!(await isRestaurantOwnerActive(restaurantDoc))) {
+      return res.status(409).json({
+        success: false,
+        code: 'RESTAURANT_INACTIVE',
+        message: 'Ce restaurant ne prend pas de commandes pour le moment.',
+      });
+    }
+
+    if (req.body?.fulfillment !== 'pickup') {
+      const quoteAddress = normalizeDeliveryAddress(req.body?.deliveryAddress);
+      if (quoteAddress) {
+        const zone = await checkDeliveryZone({ restaurant: restaurantDoc, address: quoteAddress });
+        if (!zone.ok) {
+          return res.status(422).json({
+            success: false,
+            code: 'OUT_OF_DELIVERY_ZONE',
+            radiusKm: zone.radiusKm,
+            distanceKm: zone.distanceKm,
+            message: `Cette adresse est hors de la zone de livraison de ce commerce (${zone.radiusKm} km).`,
+          });
+        }
+      }
     }
 
     const quoteSchedule = parseScheduledFor(req.body?.scheduledFor, restaurantDoc);

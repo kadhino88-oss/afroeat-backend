@@ -75,7 +75,7 @@ test('la décision d’ouverture ne change rien hors production réelle', () => 
 test('le paiement à la livraison et les versements suivent la vraie production, pas le verrou', () => {
   const pay = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'paymentController.js'), 'utf8');
   assert.match(pay, /const decision = cashDecision\(order\);\s+if \(!decision\.allowed\)/);
-  assert.match(pay, /let cash = !isRealProduction\(\)/);
+  assert.match(pay, /let cash = isCashEnabled\(\)/);
   assert.match(pay, /hasStripeTestSecret\(\) \|\| isLiveCommerceOpen\(\)/);
   const payouts = fs.readFileSync(path.join(__dirname, '..', 'utils', 'marketplacePayouts.js'), 'utf8');
   assert.match(payouts, /if \(isRealProduction\(\)\) \{\s+return secretKey\.startsWith\('sk_live_'\)/);

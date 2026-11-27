@@ -206,6 +206,7 @@ test('restaurant invité : sa fiche restaurant est créée (fermée, devise du p
   assert.equal(doc.businessType, 'shop');
   assert.equal(doc.currency, 'EUR');
   assert.equal(doc.isOpen, false);
+  assert.equal(doc.isActive, false); // masquée jusqu'à vérification par l'administration
   assert.equal(doc.location.latitude, 46.19);
   assert.equal(new Restaurant(doc).validateSync(), undefined, String(new Restaurant(doc).validateSync()));
   assert.equal(currencyFor('Suisse'), 'CHF');
