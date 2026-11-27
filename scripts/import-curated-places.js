@@ -7,6 +7,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
+const { connectOfficialDatabase } = require('../utils/officialDatabase');
 const Place = require('../models/Place');
 const {
   validateEntry, buildQuery, toPlaceDoc, makeKey, sharesDistinctiveName, DUPLICATE_RADIUS_METERS,
@@ -33,7 +34,7 @@ const main = async () => {
   }
   const entries = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'curated-african-places.json'), 'utf8'));
 
-  await mongoose.connect(process.env.MONGO_URI);
+  await connectOfficialDatabase(mongoose, process.env.MONGO_URI);
   await Place.init();
 
   let imported = 0;

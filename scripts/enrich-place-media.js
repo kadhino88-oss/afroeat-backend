@@ -12,7 +12,8 @@ const mongoose = require('mongoose');
 const Place = require('../models/Place');
 const { extractSiteMedia } = require('../utils/siteMedia');
 
-const EXPECTED_DB = process.env.EXPECT_DB || 'afroeat_staging';
+const { expectedDatabaseName, connectOfficialDatabase } = require('../utils/officialDatabase');
+const EXPECTED_DB = expectedDatabaseName();
 const MAX_BYTES = 1500000;
 
 const fetchHtml = async (url) => {
@@ -45,7 +46,7 @@ const fetchHtml = async (url) => {
 
 const main = async () => {
   if (!process.env.MONGO_URI) throw new Error('MONGO_URI manquant.');
-  await mongoose.connect(process.env.MONGO_URI);
+  await connectOfficialDatabase(mongoose, process.env.MONGO_URI);
   if (mongoose.connection.name !== EXPECTED_DB) {
     throw new Error(`Refusé : base « ${mongoose.connection.name} » au lieu de « ${EXPECTED_DB} ».`);
   }

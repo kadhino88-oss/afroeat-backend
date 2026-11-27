@@ -6,6 +6,7 @@ require('dotenv').config();
 const fs = require('fs');
 const readline = require('readline');
 const mongoose = require('mongoose');
+const { connectOfficialDatabase } = require('../utils/officialDatabase');
 const Place = require('../models/Place');
 const { featureToPlace } = require('../utils/osmPlaces');
 
@@ -22,7 +23,7 @@ const main = async () => {
     process.exit(1);
   }
 
-  await mongoose.connect(process.env.MONGO_URI);
+  await connectOfficialDatabase(mongoose, process.env.MONGO_URI);
   await Place.init();
 
   const stats = await mongoose.connection.db.command({ dbStats: 1, scale: 1024 * 1024 });
