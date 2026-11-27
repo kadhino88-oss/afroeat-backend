@@ -95,6 +95,24 @@ Orders use menu-record prices and availability, restaurant currency/delivery fee
 
 Donations are not offered until a beneficiary, accounting, settlement and public disclosure flow is configured. Partner identity documents are handled by the reviewed onboarding flow described in `docs/PASSAGE_EN_PRODUCTION.md`; do not accept identity files or bank details anywhere else.
 
+## Migrating data between databases
+
+`scripts/migrate-between-databases.js` (logic in `utils/databaseMigration.js`) copies chosen collections from one database to another **in the same MongoDB cluster**, for instance `afroeat_staging` to `afroeatDB`. It never deletes or modifies anything in the target.
+
+```
+MONGO_URI=... node scripts/migrate-between-databases.js --from afroeat_staging --to afroeatDB --collections restaurants,menuitems [--apply] [--include-users --confirm-users afroeatDB]
+```
+
+- **Dry run by default.** Without `--apply` it only reads and prints, per collection, the number of source documents, those already present in the target (same `_id`) and those that would be copied.
+- **`--collections` is mandatory**: no default, no "everything". Only collections of this repository's models are allowed (derived from `models/`: `restaurants`, `menuitems`, `orders`, `ledgerentries`, ...); any other name is refused.
+- **Target guards**: refused when `--from` equals `--to`, when `--to` differs from `AFROEAT_MONGO_DB_NAME` (if that variable is set), or when `--to` carries a non-production label (staging, test, dev, sandbox, local; same rule as `utils/databaseEnvironment.js`). All checks run before any connection is opened.
+- **`users`** is copied only with `--include-users`; with `--apply` you must also pass `--confirm-users <target database name>`. The script warns that users hold hashed passwords, tokens and 2FA secrets encrypted with `DOCUMENT_ENCRYPTION_KEY`: the target API must use the **same key** as the source, otherwise copied 2FA secrets are unreadable. The same key requirement applies to `verificationdocuments` / `verificationfiles`. Copying `orders`, `ledgerentries` or `stripeevents` from a test (Stripe test mode) database into production mixes test money movements into real accounting: it prints a warning, think twice.
+- **Only missing documents are inserted** (`insertMany` with `ordered: false`, batches of 500 by default, `--batch-size` up to 1000). Existing target documents are never updated, so re-running is idempotent. A document whose `_id` is new but that violates a unique index of the target (for instance a duplicate e-mail) is skipped and counted as "conflit d'index unique".
+- **No document content is ever printed** (only counts and collection names; MongoDB error messages, which can quote values, are not printed either).
+- **Indexes are not copied.** Run `npm run db:sync-indexes` against the target afterwards.
+
+Recommended order: dry run, read the counts and warnings, take a backup of the target (Atlas snapshot), then rerun with `--apply`. The script has only been tested against in-memory doubles; run the dry run on the real cluster first.
+
 ## Production launch checklist
 
 Before production enablement, configure a secret manager, production MongoDB with backups, HTTPS API domain, exact `CORS_ORIGINS`, Stripe production keys and signed webhooks (platform `STRIPE_WEBHOOK_SECRET` and Connect `STRIPE_CONNECT_WEBHOOK_SECRET`), `CRON_SECRET` and a scheduler for the payout retry and the daily ledger reconciliation (plus someone who reads its reports), the country/platform and approved marketplace split rates, Connect partner verification/payout accounts, a cash settlement ledger if cash is offered, push/map credentials and legal/privacy/support pages. Close the P0 gaps above, then run MongoDB integration tests, Stripe test-mode payments and webhook cases, Android/iOS device tests, cancellation/refund/dispute tests, accessibility checks and network-failure/retry tests.
