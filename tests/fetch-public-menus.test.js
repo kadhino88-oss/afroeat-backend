@@ -37,3 +37,19 @@ test('le script n\'écrit rien (ni base ni fichier) et le bouton n\'utilise aucu
   assert.doesNotMatch(wf, /secrets\./);
   assert.match(wf, /permissions:\n\s+contents: read/);
 });
+
+test('décodage en une seule passe et adresses refusées', () => {
+  const { decode, safeUrl } = require('../scripts/fetch-public-menus');
+  assert.equal(decode('Poulet &amp; riz &euro; &#233;'), 'Poulet & riz € é');
+  assert.equal(decode('&amp;lt;b&amp;gt;'), '&lt;b&gt;');
+  for (const ko of ['file:///etc/passwd', 'http://127.0.0.1/', 'http://localhost/', 'http://169.254.169.254/', 'https://a:b@exemple.fr/', 'https://exemple.fr:8080/', 'http://serveur.internal/', 'ftp://exemple.fr']) assert.equal(safeUrl(ko), null, ko);
+  assert.equal(safeUrl('https://www.exemple.fr/menu'), 'https://www.exemple.fr/menu');
+});
+
+test('la liste des 13 sites est valide', () => {
+  const { safeUrl } = require('../scripts/fetch-public-menus');
+  const sites = require('../data/showcase/sites');
+  assert.equal(sites.length, 13);
+  assert.equal(new Set(sites.map((s) => s.key)).size, 13);
+  for (const s of sites) assert.ok(safeUrl(s.url), s.url);
+});

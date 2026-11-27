@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Lit les pages publiques des sites listés dans data/showcase/sites.json et AFFICHE (journal uniquement) les lignes qui
+ * Lit les pages publiques des sites listés dans data/showcase/sites.js et AFFICHE (journal uniquement) les lignes qui
  * contiennent un prix, avec la ligne qui précède (le nom du plat). N'écrit rien en base ni sur disque.
  * Sert à préparer, à la main, les fichiers data/showcase/menus/*.json. Texte seulement : aucune image n'est lue.
  *
@@ -10,8 +10,7 @@
  * Garde-fous : seules les adresses du fichier de la liste (et des liens du MÊME site) sont lues ; http(s) uniquement ;
  * 12 s et 1,5 Mo par page ; 3 pages de menu au plus par site ; un seul accès à la fois ; identifiant de robot clair.
  */
-const fs = require('fs');
-const path = require('path');
+const SITES = require('../data/showcase/sites');
 
 const MAX_BYTES = 1_500_000;
 const TIMEOUT_MS = 12_000;
@@ -21,15 +20,32 @@ const PRICE = /(\d{1,3}(?:[.,]\d{1,2})?\s?(?:€|eur\b|chf\b|fr\.?\b))|((?:€|c
 const MENU_LINK = /(menu|carte|plats?|food|restauration|a-emporter|emporter|commander|order|boissons|desserts?)/i;
 const UA = 'AfroeatBot/1.0 (preparation de menus de demonstration; contact: BK Entreprise)';
 
-const decode = (s) => s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&euro;/g, '€').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"')
-  .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&[a-z]+;/g, ' ');
+const ENTITIES = { nbsp: ' ', amp: '&', euro: '€', apos: "'", quot: '"', lt: '<', gt: '>' };
+// Une seule passe : « &amp;lt; » devient « &lt; » (texte), jamais « < » (pas de double décodage).
+const decode = (s) => s.replace(/&(?:#(\d{1,6})|#39|([a-z]+));/gi, (m, num, name) => {
+  if (num) return String.fromCharCode(Number(num));
+  if (m === '&#39;') return "'";
+  return Object.prototype.hasOwnProperty.call(ENTITIES, name.toLowerCase()) ? ENTITIES[name.toLowerCase()] : ' ';
+});
+
+// Adresse acceptée : http(s), nom de domaine public (ni IP, ni localhost, ni réseau interne), sans identifiants.
+const safeUrl = (raw) => {
+  let u;
+  try { u = new URL(String(raw)); } catch { return null; }
+  if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.port) return null;
+  const h = u.hostname.toLowerCase();
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(h) || /^\d+(\.\d+)*$/.test(h) || /\.(local|internal|localhost)$/.test(h)) return null;
+  return u.href;
+};
 
 const toLines = (html) => decode(
   html.replace(/<!--[\s\S]*?-->/g, ' ').replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<\/(p|div|li|tr|td|th|h[1-6]|section|article|ul|ol|table|br|span)>|<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' ')
 ).split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
 
-const fetchPage = async (url) => {
+const fetchPage = async (rawUrl) => {
+  const url = safeUrl(rawUrl);
+  if (!url) return { ok: false, status: 'adresse refusée' };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -83,8 +99,7 @@ const priceLines = (lines) => {
 };
 
 const main = async () => {
-  const sites = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'showcase', 'sites.json'), 'utf8'));
-  for (const site of sites) {
+  for (const site of SITES) {
     console.log(`\n===== ${site.key} — ${site.name} — ${site.url}`);
     const home = await fetchPage(site.url);
     if (!home.ok) { console.log(`INACCESSIBLE (${home.status})`); continue; }
@@ -109,4 +124,4 @@ if (require.main === module) {
   main().catch((e) => { console.error(`Échec : ${e.message}`); process.exit(1); });
 }
 
-module.exports = { toLines, priceLines, sameSiteMenuLinks, PRICE };
+module.exports = { toLines, priceLines, sameSiteMenuLinks, PRICE, decode, safeUrl };

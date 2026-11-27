@@ -1,6 +1,6 @@
 name: Lire les menus publics des restaurants (journal seulement)
 
-# Bouton manuel. Lit les pages publiques listées dans data/showcase/sites.json et affiche dans le journal les lignes
+# Bouton manuel. Lit les pages publiques listées dans data/showcase/sites.js et affiche dans le journal les lignes
 # qui contiennent un prix. N'écrit rien (ni base de données, ni fichier) et n'utilise aucun secret.
 on:
   workflow_dispatch:
