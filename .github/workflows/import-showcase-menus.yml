@@ -1,7 +1,9 @@
 name: Importer les menus indicatifs (phase de test)
 
-# Bouton manuel. Ajoute les menus indicatifs de data/showcase/menus.js aux fiches existantes SANS menu, les ferme et les
-# marque « menu indicatif, non partenaire » (aucune commande possible). Ne supprime rien, ne crée aucune fiche.
+# Bouton manuel. Affiche des menus indicatifs (data/showcase/menus.js) pour des commerces qui ont un site public :
+# ajoute les plats à une fiche existante SANS menu, ou crée une fiche d'AFFICHAGE depuis le lieu d'annuaire (compte
+# propriétaire « vitrine » suspendu). Dans tous les cas la fiche est fermée et marquée « menu indicatif, non partenaire » :
+# aucune commande possible. Ne supprime rien.
 # 1) Lancer d'abord SANS « apply » : simulation, rien n'est écrit.  2) Puis avec « apply » et confirm = afroeatDB.
 # Secret requis : PLACES_MONGO_URI.
 on:
