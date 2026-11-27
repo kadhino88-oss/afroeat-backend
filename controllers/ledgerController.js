@@ -8,6 +8,7 @@ const { checkCronSecret } = require('../utils/cronAuth');
 const { fromMinorUnits } = require('../utils/currency');
 const { parsePeriod, getYesterdayPeriodUtc } = require('../utils/ledgerDates');
 const { summarizeLedger } = require('../utils/ledger');
+const { sendReconciliationAlert } = require('../utils/ledgerAlert');
 const {
   reconcileLedgerWithOrders,
   fetchStripeBalanceTotals,
@@ -41,6 +42,15 @@ const getLedgerSummary = async (req, res) => {
   }
 };
 
+// Alerte e-mail à échec ouvert : sendReconciliationAlert ne lève pas, ce filet protège la réponse du cron.
+const alertSafely = async (input) => {
+  try {
+    await sendReconciliationAlert(input, { ReportModel: LedgerReconciliationReport });
+  } catch (error) {
+    console.error('LEDGER ALERT WRAPPER ERROR =>', { name: error?.name, code: error?.code });
+  }
+};
+
 // POST /api/payments/ledger/reconcile-daily : rapproche la veille (UTC) avec les commandes et Stripe, stocke un
 // rapport et ne renvoie que des compteurs. Authentifié par CRON_SECRET. Ne corrige JAMAIS rien.
 const reconcileDailyCron = async (req, res) => {
@@ -52,8 +62,9 @@ const reconcileDailyCron = async (req, res) => {
     return res.status(503).json({ success: false, code: 'STRIPE_NOT_CONFIGURED', message: 'Stripe indisponible.' });
   }
 
+  let period = null;
   try {
-    const period = getYesterdayPeriodUtc();
+    period = getYesterdayPeriodUtc();
     const local = await reconcileLedgerWithOrders(period);
     const discrepancies = [...local.discrepancies];
     let truncated = local.truncated;
@@ -94,6 +105,18 @@ const reconcileDailyCron = async (req, res) => {
       { upsert: true }
     );
 
+    // Alerte e-mail (échec ouvert : n'altère jamais la réponse). Uniquement pour « mismatch ».
+    if (status === 'mismatch') {
+      const countsByKind = { ...local.counts };
+      for (const extra of discrepancies.slice(local.discrepancies.length)) {
+        countsByKind[extra.kind] = (countsByKind[extra.kind] || 0) + 1;
+      }
+      await alertSafely({
+        kind: 'mismatch', period, countsByKind, discrepancyCount, truncated,
+        stripeComplete: stripeSide.complete, ledgerTotals: local.ledgerTotals, stripeTotals: stripeSide.totals,
+      });
+    }
+
     return res.status(200).json({
       success: true,
       status,
@@ -105,6 +128,7 @@ const reconcileDailyCron = async (req, res) => {
     });
   } catch (error) {
     console.error('LEDGER RECONCILE CRON ERROR =>', { name: error?.name, code: error?.code });
+    if (period) await alertSafely({ kind: 'failed', period });
     return res.status(500).json({ success: false, message: 'Rapprochement du ledger impossible.' });
   }
 };
