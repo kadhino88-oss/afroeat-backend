@@ -1,0 +1,74 @@
+name: Copier restaurants, menus et lieux vers la production
+
+# Bouton manuel (onglet « Actions » → « Run workflow »), utilisable depuis un téléphone.
+# Copie les collections restaurants, menuitems et places de l'ancienne base (afroeat_staging) vers la base
+# de production (afroeatDB) du MÊME cluster. Ne supprime ni ne modifie jamais rien dans la cible : seuls les
+# documents dont l'_id est absent sont insérés. Aucun contenu de document n'est affiché (compteurs seulement).
+#
+# 1) Lancer d'abord SANS cocher « apply » : simulation, rien n'est écrit, les nombres s'affichent.
+# 2) Puis relancer en cochant « apply » et en tapant afroeatDB dans « confirm ».
+#
+# Secret requis (Settings → Secrets and variables → Actions) : MIGRATION_MONGO_URI, adresse de connexion d'un
+# utilisateur Atlas autorisé à LIRE afroeat_staging et à ÉCRIRE dans afroeatDB. À défaut, PLACES_MONGO_URI est essayé.
+# Ne jamais coller cette adresse dans une conversation : la saisir uniquement dans GitHub.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Écrire réellement dans afroeatDB (sinon : simulation, rien n'est écrit)"
+        type: boolean
+        default: false
+      confirm:
+        description: "Pour apply : taper exactement afroeatDB"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrate-production-data
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FROM_DB: afroeat_staging
+      TO_DB: afroeatDB
+      COLLECTIONS: restaurants,menuitems,places
+      AFROEAT_MONGO_DB_NAME: afroeatDB
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Vérifier la confirmation
+        env:
+          APPLY: ${{ inputs.apply }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$APPLY" = "true" ] && [ "$CONFIRM" != "afroeatDB" ]; then
+            echo "::error::Pour écrire, tapez exactement afroeatDB dans « confirm »."
+            exit 1
+          fi
+      - name: Copier (ou simuler)
+        env:
+          MONGO_URI: ${{ secrets.MIGRATION_MONGO_URI || secrets.PLACES_MONGO_URI }}
+          APPLY: ${{ inputs.apply }}
+        run: |
+          if [ -z "$MONGO_URI" ]; then
+            echo "::error::Le secret MIGRATION_MONGO_URI (ou PLACES_MONGO_URI) est absent."
+            exit 1
+          fi
+          if [ "$APPLY" = "true" ]; then
+            node scripts/migrate-between-databases.js --from "$FROM_DB" --to "$TO_DB" --collections "$COLLECTIONS" --apply
+          else
+            node scripts/migrate-between-databases.js --from "$FROM_DB" --to "$TO_DB" --collections "$COLLECTIONS"
+          fi

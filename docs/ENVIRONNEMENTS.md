@@ -68,10 +68,15 @@ Le plan Vercel gratuit limite les tâches planifiées à **une exécution par jo
 
 ## 5. Ce qui reste à décider ou à vérifier
 
-1. **Données de `afroeat_staging`** : quelles collections (restaurants, menus, partenaires…) doivent
-   être copiées vers `afroeatDB` ? Procédure sûre : `scripts/migrate-between-databases.js`
-   (essai à blanc par défaut, sauvegarde Atlas avant, vérification des références ensuite).
-   Ne rien copier sans décision explicite.
+1. **Données de `afroeat_staging`** : constat du 27/11/2026, l'API de production (`afroeatDB`) répond
+   0 restaurant et 0 lieu. Copie des collections `restaurants`, `menuitems` et `places` (jamais `users`)
+   avec le bouton GitHub **« Copier restaurants, menus et lieux vers la production »** (onglet Actions) :
+   1. ajouter le secret `MIGRATION_MONGO_URI` (utilisateur Atlas autorisé à lire `afroeat_staging` et à
+      écrire dans `afroeatDB`) dans Settings → Secrets and variables → Actions ;
+   2. lancer d'abord **sans** cocher `apply` : les nombres par collection s'affichent, rien n'est écrit ;
+   3. relancer en cochant `apply` et en tapant `afroeatDB` dans `confirm`. Seuls les documents absents de
+      la cible sont insérés ; rien n'est supprimé ni modifié. Les index existent déjà (créés au déploiement).
+   Sauvegarde Atlas recommandée avant l'étape 3.
 2. **Journal de construction Vercel** : vérifier au prochain déploiement qu'il n'y a plus de
    conflit d'index sur les commandes.
 3. **Recette Stripe en mode test** : à faire avant `AFROEAT_LIVE_COMMERCE=open`.
