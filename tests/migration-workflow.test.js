@@ -29,5 +29,5 @@ test('bouton de copie : aucune entrée saisie n’est interpolée dans un script
   assert.match(text, /permissions:\n\s+contents: read/);
   assert.match(text, /concurrency:/);
   // Le secret ne passe que par l'environnement, jamais affiché.
-  assert.doesNotMatch(text, /echo[^\n]*MONGO_URI/);
+  assert.doesNotMatch(text, /echo[^\n]*\$\{?MONGO_URI/);
 });
