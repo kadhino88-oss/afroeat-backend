@@ -31,7 +31,13 @@ router.get('/terms', (req, res) => {
   }
   res.set('Cache-Control', 'public, max-age=300');
   const { offerSummary } = require('../utils/partnerOffer');
-  return res.json({ success: true, terms: { ...partnerTermsFromRates(rates), offer: offerSummary() } });
+  const { isConnectPayoutsEnabled } = require('../utils/marketplacePayouts');
+  // payoutsAutomatic : faux tant que les versements Stripe Connect sont coupés — l'appli n'affiche alors pas
+  // la promesse « versé automatiquement à chaque commande livrée ».
+  return res.json({
+    success: true,
+    terms: { ...partnerTermsFromRates(rates), offer: { ...offerSummary(), payoutsAutomatic: isConnectPayoutsEnabled() } },
+  });
 });
 
 // Invitation : le partenaire crée lui-même son compte (jeton de 64 caractères, à usage unique).
