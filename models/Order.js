@@ -528,8 +528,11 @@ orderSchema.index(
 orderSchema.index({ restaurant: 1, createdAt: -1 });
 orderSchema.index({ deliveryPerson: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1, createdAt: -1 });
-orderSchema.index({ stripePaymentIntentId: 1 });
-orderSchema.index({ stripeCheckoutSessionId: 1 });
+// `sparse: true` aligns with the indexes already present in the production database (same generated names,
+// stripePaymentIntentId_1 / stripeCheckoutSessionId_1). Without it Mongo refuses to create them (IndexOptionsConflict).
+// Sparse only omits documents WITHOUT the field; the code looks these ids up by equality / $in / $nin only.
+orderSchema.index({ stripePaymentIntentId: 1 }, { sparse: true });
+orderSchema.index({ stripeCheckoutSessionId: 1 }, { sparse: true });
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ status: 1, deliveryPerson: 1, updatedAt: -1 });
 orderSchema.index({ restaurant: 1, status: 1, createdAt: -1 });

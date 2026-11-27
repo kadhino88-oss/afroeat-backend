@@ -45,6 +45,10 @@ const reportSchema = new mongoose.Schema(
     ordersScanned: { type: Number, default: 0 },
     ledgerEntriesScanned: { type: Number, default: 0 },
     generatedAt: { type: Date, default: Date.now },
+    // Alerte e-mail déjà envoyée pour ce statut (un seul e-mail par période et par statut, voir utils/ledgerAlert.js).
+    // Ce rapport n'est pas le ledger : il reste modifiable (le cron le remplace), contrairement à LedgerEntry.
+    alertedStatus: { type: String, enum: ['mismatch', 'failed'] },
+    alertSentAt: { type: Date },
   },
   { versionKey: false }
 );
