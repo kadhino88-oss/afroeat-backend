@@ -1,0 +1,84 @@
+name: Rattacher un propriétaire à un restaurant existant
+
+# Bouton manuel. Rattache la fiche d'un restaurant déjà présent en production (ex. copié depuis l'ancienne base)
+# à un compte propriétaire, et peut corriger son pays et sa devise. Ne crée jamais de second restaurant.
+# 1) Lancer d'abord SANS « apply » : simulation, rien n'est écrit.  2) Puis avec « apply » et confirm = afroeatDB.
+# Secret requis : PLACES_MONGO_URI. Le mot de passe du propriétaire est aléatoire et jamais affiché : il choisit
+# le sien avec « Mot de passe oublié ».
+on:
+  workflow_dispatch:
+    inputs:
+      restaurant_id:
+        description: "Identifiant de la fiche restaurant (24 caractères)"
+        required: true
+        type: string
+      owner_email:
+        description: "E-mail du propriétaire"
+        required: true
+        type: string
+      owner_name:
+        description: "Nom du propriétaire"
+        required: true
+        type: string
+      owner_phone:
+        description: "Téléphone du propriétaire (facultatif)"
+        required: false
+        type: string
+        default: ""
+      country:
+        description: "Corriger le pays (la devise suit) : France ou Suisse ; vide = ne rien changer"
+        required: false
+        type: choice
+        default: ""
+        options: ["", "France", "Suisse"]
+      apply:
+        description: "Écrire réellement (sinon : simulation)"
+        type: boolean
+        default: false
+      confirm:
+        description: "Pour apply : taper exactement afroeatDB"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: attach-partner-owner
+  cancel-in-progress: false
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Vérifier la confirmation
+        env:
+          APPLY: ${{ inputs.apply }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$APPLY" = "true" ] && [ "$CONFIRM" != "afroeatDB" ]; then
+            echo "::error::Pour écrire, tapez exactement afroeatDB dans « confirm »."
+            exit 1
+          fi
+      - name: Rattacher (ou simuler)
+        env:
+          MONGO_URI: ${{ secrets.PLACES_MONGO_URI }}
+          RESTAURANT_ID: ${{ inputs.restaurant_id }}
+          OWNER_EMAIL: ${{ inputs.owner_email }}
+          OWNER_NAME: ${{ inputs.owner_name }}
+          OWNER_PHONE: ${{ inputs.owner_phone }}
+          COUNTRY: ${{ inputs.country }}
+          APPLY: ${{ inputs.apply }}
+        run: |
+          if [ -z "$MONGO_URI" ]; then
+            echo "::error::Le secret PLACES_MONGO_URI est absent."
+            exit 1
+          fi
+          node scripts/attach-partner-owner.js
