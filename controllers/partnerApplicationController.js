@@ -14,6 +14,26 @@ const {
 const { validateApplication, STATUSES } = require('../utils/partnerApplication');
 
 const mailer = require('../utils/mailer');
+const { createAuditLog } = require('./adminAuditController');
+
+// Journal d'audit des décisions sur les candidatures (échec silencieux : n'empêche jamais la décision).
+const auditApplication = async (req, action, application, details) => {
+  try {
+    await createAuditLog({
+      adminId: req.user._id,
+      action,
+      targetType: 'user',
+      targetId: application._id,
+      targetLabel: `${application.businessName || ''} <${application.email || ''}>`,
+      details,
+      metadata: { applicationId: String(application._id), status: application.status, kind: application.businessType },
+      ipAddress: String(req.headers?.['x-forwarded-for'] || req.ip || '').split(',')[0].trim(),
+      userAgent: String(req.headers?.['user-agent'] || '').slice(0, 500),
+    });
+  } catch (error) {
+    console.error('Partner application audit error:', error.message);
+  }
+};
 const {
   adminNewApplicationEmail,
   applicantConfirmationEmail,
@@ -110,6 +130,7 @@ const updateApplication = async (req, res) => {
 
     const application = await PartnerApplication.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!application) return res.status(404).json({ success: false, message: 'Demande introuvable.' });
+    if (update.status) await auditApplication(req, 'update_partner_application', application, `Candidature passée à « ${update.status} ».`);
     return res.json({ success: true, application });
   } catch (error) {
     return res.status(400).json({ success: false, message: 'Identifiant invalide.' });
@@ -205,6 +226,7 @@ const createInvite = async (req, res) => {
         console.error('Partner upgrade mail error:', error.message);
       }
 
+      await auditApplication(req, 'invite_partner', application, `Compte client existant converti en « ${role} ».`);
       return res.json({
         success: true,
         accountUpgraded: true,
@@ -233,6 +255,7 @@ const createInvite = async (req, res) => {
       console.error('Partner invite mail error:', error.message);
     }
 
+    await auditApplication(req, 'invite_partner', application, 'Lien d’invitation généré (7 jours, usage unique).');
     return res.json({ success: true, inviteUrl, expiresAt, emailSent });
   } catch (error) {
     console.error('Partner invite error:', error.message);
