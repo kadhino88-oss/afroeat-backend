@@ -17,7 +17,8 @@ const MenuItem = require('../models/MenuItem');
 
 const OWNER_EMAIL = 'restaurant-essai@afroeat.invalid';
 const RESTAURANT_NAME = "ESSAI D'ACHAT — À SUPPRIMER";
-const EXPECTED_DB = process.env.EXPECT_DB || 'afroeat_staging';
+const { expectedDatabaseName, connectOfficialDatabase } = require('../utils/officialDatabase');
+const EXPECTED_DB = expectedDatabaseName();
 
 const main = async () => {
   const action = String(process.env.ACTION || 'create').toLowerCase();
@@ -25,7 +26,7 @@ const main = async () => {
     console.error('Usage : MONGO_URI=... ACTION=create|remove node scripts/launch-test-restaurant.js');
     process.exit(1);
   }
-  await mongoose.connect(process.env.MONGO_URI);
+  await connectOfficialDatabase(mongoose, process.env.MONGO_URI);
   if (mongoose.connection.name !== EXPECTED_DB) {
     console.error(`Refusé : base « ${mongoose.connection.name} » au lieu de « ${EXPECTED_DB} ».`);
     process.exit(1);

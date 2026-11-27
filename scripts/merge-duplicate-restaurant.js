@@ -17,7 +17,8 @@ const Order = require('../models/Order');
 const OrderMessage = require('../models/OrderMessage');
 const Review = require('../models/Review');
 
-const EXPECTED_DB = process.env.EXPECT_DB || 'afroeat_staging';
+const { expectedDatabaseName, connectOfficialDatabase } = require('../utils/officialDatabase');
+const EXPECTED_DB = expectedDatabaseName();
 const COPY_IF_EMPTY = ['logo', 'image', 'description'];
 
 const main = async () => {
@@ -27,7 +28,7 @@ const main = async () => {
   if (!mongoose.isValidObjectId(KEEP_ID) || !mongoose.isValidObjectId(REMOVE_ID) || KEEP_ID === REMOVE_ID) {
     throw new Error('KEEP_ID et REMOVE_ID doivent être deux identifiants différents.');
   }
-  await mongoose.connect(MONGO_URI);
+  await connectOfficialDatabase(mongoose, MONGO_URI);
   if (mongoose.connection.name !== EXPECTED_DB) {
     throw new Error(`Refusé : base « ${mongoose.connection.name} » au lieu de « ${EXPECTED_DB} ».`);
   }

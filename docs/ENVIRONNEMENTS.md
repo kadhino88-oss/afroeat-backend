@@ -83,6 +83,14 @@ Le plan Vercel gratuit limite les tâches planifiées à **une exécution par jo
 4. **Second compte administrateur** : facultatif, utile seulement pour récupérer l'accès si le
    téléphone de l'unique administrateur est perdu.
 
+## 5 bis. Boutons GitHub d'administration
+
+Depuis le 27/11/2026, les boutons GitHub qui écrivent dans la base officielle (import des commerces, photos et
+logos des sites, ajout d'un partenaire, activation d'un restaurant, promotion d'un administrateur, restaurant
+d'essai, fusion de doublons) visent **`afroeatDB`** : le nom de la base est imposé par le code
+(`utils/officialDatabase.js`), quelle que soit la fin de l'adresse du secret `PLACES_MONGO_URI`. Pour viser une
+autre base, il faut le demander explicitement avec la variable `EXPECT_DB`.
+
 ## 6. Règles pour ne plus se tromper
 
 - Avant de créer une variable ou un point de réception : nommer **le projet Vercel et le compte

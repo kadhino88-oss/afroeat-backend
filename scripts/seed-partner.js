@@ -19,7 +19,8 @@ const Restaurant = require('../models/Restaurant');
 const MenuItem = require('../models/MenuItem');
 const UploadedImage = require('../models/UploadedImage');
 
-const EXPECTED_DB = process.env.EXPECT_DB || 'afroeat_staging';
+const { expectedDatabaseName, connectOfficialDatabase } = require('../utils/officialDatabase');
+const EXPECTED_DB = expectedDatabaseName();
 const PUBLIC_API_URL = String(process.env.PUBLIC_API_URL || 'https://afroeat-api-staging.vercel.app').replace(/\/+$/, '');
 const MAX_MEDIA_BYTES = 900 * 1024;
 
@@ -54,7 +55,7 @@ const loadPartner = (key) => {
 const main = async () => {
   const data = loadPartner(process.env.PARTNER);
   if (!process.env.MONGO_URI) throw new Error('MONGO_URI manquant.');
-  await mongoose.connect(process.env.MONGO_URI);
+  await connectOfficialDatabase(mongoose, process.env.MONGO_URI);
   if (mongoose.connection.name !== EXPECTED_DB) {
     throw new Error(`Refusé : base « ${mongoose.connection.name} » au lieu de « ${EXPECTED_DB} ».`);
   }

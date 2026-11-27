@@ -9,7 +9,8 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 
 // Garde : refuse de tourner sur une autre base que celle attendue (EXPECT_DB pour la production).
-const EXPECTED_DB = process.env.EXPECT_DB || 'afroeat_staging';
+const { expectedDatabaseName, connectOfficialDatabase } = require('../utils/officialDatabase');
+const EXPECTED_DB = expectedDatabaseName();
 
 const maskEmail = (email) => {
   const [local = '', domain = ''] = String(email || '').split('@');
@@ -23,7 +24,7 @@ const main = async () => {
     process.exit(1);
   }
 
-  await mongoose.connect(process.env.MONGO_URI);
+  await connectOfficialDatabase(mongoose, process.env.MONGO_URI);
   if (mongoose.connection.name !== EXPECTED_DB) {
     await mongoose.disconnect();
     console.error(`Refusé : base « ${mongoose.connection.name} ».`);
