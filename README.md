@@ -50,6 +50,8 @@ It has no user session: it is authenticated with the shared secret `CRON_SECRET`
 
 Indexes are required (the production database has `autoIndex` off): run `npm run db:sync-indexes`, in particular for the unique `idempotencyKey`.
 
+The `Order` indexes `stripePaymentIntentId_1` and `stripeCheckoutSessionId_1` are declared `sparse: true` to match the indexes already present in the production database (a mismatch makes `db:sync-indexes` report `IndexOptionsConflict` and skip them). Sparse indexes only leave out documents that lack the field; the code only looks these fields up by equality, `$in` or `$nin`. `tests/orderStripeIndexes.test.js` guards the options and generated names. Do not change them without checking the live index definitions first.
+
 Reconciliation is read-only and never corrects anything or moves money:
 
 - `GET /api/admin/ledger/summary?from=&to=` (admin session, rate-limited on the route): ledger totals per type and per currency (`totals`) and the net per currency (`net`) over `[from, to)`. `from` and `to` are both required, UTC ISO 8601 (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm:ssZ`, optional `.sss`), `from < to`, at most 366 days; anything else answers 400.
