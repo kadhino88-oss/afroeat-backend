@@ -2,11 +2,22 @@
 
 /**
  * Fiche restaurant créée à partir d'une candidature acceptée, au moment où le partenaire
- * crée son compte. Fermée par défaut : le restaurateur l'ouvre quand son menu est prêt.
+ * crée son compte. Masquée ET fermée par défaut : l'administration la rend visible après vérification,
+ * puis le restaurateur l'ouvre quand son menu est prêt.
  */
 const TYPE_MAP = { restaurant: 'restaurant', grocery: 'grocery', shop: 'shop', drinks: 'drinks', other: 'shop' };
 
-const currencyFor = (country = '') => (/france/i.test(String(country)) ? 'EUR' : 'CHF');
+// Pays acceptés pour un partenaire (codes ISO, noms français ou anglais) → libellé canonique.
+const COUNTRY_ALIASES = {
+  fr: 'France', france: 'France',
+  ch: 'Suisse', suisse: 'Suisse', switzerland: 'Suisse', schweiz: 'Suisse', svizzera: 'Suisse',
+};
+const normalizeCountry = (country = '') => {
+  const raw = String(country || '').trim();
+  return COUNTRY_ALIASES[raw.toLowerCase()] || raw;
+};
+
+const currencyFor = (country = '') => (normalizeCountry(country) === 'France' ? 'EUR' : 'CHF');
 
 const buildRestaurantFromApplication = (application, ownerId, point = null) => {
   const doc = {
@@ -16,13 +27,14 @@ const buildRestaurantFromApplication = (application, ownerId, point = null) => {
     cuisine: 'Africaine',
     address: application.address,
     city: application.city,
-    country: application.country || 'Suisse',
+    country: normalizeCountry(application.country) || 'Suisse',
     phone: application.phone,
     email: application.email,
     description: '',
     currency: currencyFor(application.country),
     deliveryFee: 0,
-    isActive: true,
+    // Masquée tant que l'administration n'a pas vérifié le partenaire et cliqué « Rendre visible ».
+    isActive: false,
     isOpen: false,
   };
   if (point && Number.isFinite(point.lat) && Number.isFinite(point.lng)) {
@@ -76,4 +88,4 @@ const geocodeAddress = async (address, city, country, fetchImpl = globalThis.fet
   return null;
 };
 
-module.exports = { buildRestaurantFromApplication, geocodeAddress, currencyFor };
+module.exports = { buildRestaurantFromApplication, geocodeAddress, currencyFor, normalizeCountry };

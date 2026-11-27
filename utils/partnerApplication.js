@@ -1,6 +1,7 @@
 'use strict';
 
 const { isValidEmailAddress } = require('./emailValidation');
+const { normalizeCountry } = require('./partnerRestaurant');
 const TYPES = ['restaurant', 'grocery', 'shop', 'drinks', 'other', 'courier'];
 const STATUSES = ['new', 'contacted', 'approved', 'rejected'];
 
@@ -16,7 +17,7 @@ const validateApplication = (body = {}) => {
     phone: text(body.phone, 30),
     address: text(body.address, 200),
     city: text(body.city, 100),
-    country: text(body.country, 80),
+    country: normalizeCountry(text(body.country, 80)),
     website: text(body.website, 200),
     message: text(body.message, 1000),
     osmPlaceId: text(body.osmPlaceId, 60),

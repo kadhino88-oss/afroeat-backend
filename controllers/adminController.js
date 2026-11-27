@@ -588,6 +588,12 @@ const updateAdminUserStatus = async (req, res) => {
       { new: true, runValidators: true }
     ).select('-password');
 
+    // Suspendre un restaurateur retire aussitôt sa fiche du catalogue et ferme ses commandes.
+    // (La réactivation ne rend PAS la fiche visible : l'administration la republie explicitement.)
+    if (updatedUser?.role === 'restaurant' && ['suspended', 'rejected', 'deleted'].includes(nextStatus)) {
+      await Restaurant.updateMany({ owner: updatedUser._id }, { $set: { isActive: false, isOpen: false } });
+    }
+
     await safeCreateAuditLog({
       req,
       action: 'update_user_status',
