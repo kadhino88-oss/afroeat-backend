@@ -1,11 +1,35 @@
 'use strict';
 
 // Découverte de lieux réels via OpenStreetMap (Overpass API).
-const ENDPOINTS = [
+// Serveurs publics en parallèle : le premier qui répond gagne. Quand l'un est saturé (502, délai dépassé), les
+// autres prennent le relais ; la liste peut être remplacée sans redéploiement de code par OVERPASS_ENDPOINTS
+// (adresses https séparées par des virgules).
+const DEFAULT_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.osm.ch/api/interpreter',
+  'https://overpass.openstreetmap.fr/api/interpreter',
+  'https://lz4.overpass-api.de/api/interpreter',
 ];
+const MAX_ENDPOINTS = 8;
+
+const resolveEndpoints = (env = process.env) => {
+  const custom = String(env.OVERPASS_ENDPOINTS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => {
+      try {
+        const url = new URL(value);
+        return url.protocol === 'https:' && !url.username && !url.password;
+      } catch {
+        return false;
+      }
+    })
+    .slice(0, MAX_ENDPOINTS);
+  return custom.length > 0 ? custom : DEFAULT_ENDPOINTS;
+};
+const ENDPOINTS = resolveEndpoints();
 const USER_AGENT = 'AfroEat/1.0 (https://github.com/kadhino88-oss/afroeat-backend)';
 const MAX_RADIUS_KM = 100;
 const MAX_RESULTS = 500;
@@ -126,4 +150,4 @@ const findPlaces = async ({ kind, lat, lng, radiusKm }) => {
   return items;
 };
 
-module.exports = { findPlaces, clampRadiusKm, distanceKm, MAX_RADIUS_KM, MAX_RESULTS };
+module.exports = { resolveEndpoints, DEFAULT_ENDPOINTS, findPlaces, clampRadiusKm, distanceKm, MAX_RADIUS_KM, MAX_RESULTS };
